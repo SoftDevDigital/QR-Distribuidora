@@ -141,7 +141,7 @@ class MainActivity : ComponentActivity() {
 
         val fileName = "pedido_${System.currentTimeMillis()}.json"
         val file = File(getExternalFilesDir(null), fileName)
-
+//effeef
         file.writeText(json)
 
         println("Archivo guardado en: ${file.absolutePath}")
