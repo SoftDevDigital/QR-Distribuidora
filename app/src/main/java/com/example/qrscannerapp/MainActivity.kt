@@ -27,9 +27,41 @@ import com.example.qrscannerapp.ui.theme.QRScannerAppTheme
 import androidx.compose.ui.tooling.preview.Preview
 import com.journeyapps.barcodescanner.ScanOptions
 import androidx.compose.ui.unit.dp
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.ui.graphics.Color
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.width
+import androidx.compose.ui.unit.sp
+import com.example.qrscannerapp.FormularioDespacho
+import com.google.gson.Gson
+import java.io.File
+import androidx.core.content.FileProvider
+
 
 class MainActivity : ComponentActivity() {
     private var qrResult by mutableStateOf<String?>(null)
+
+    private var photoFile: File? = null
+
+    private val takePictureLauncher = registerForActivityResult(
+        ActivityResultContracts.TakePicture()
+    ) { success ->
+        if (success && photoFile != null) {
+            Toast.makeText(this, "Foto guardada en: ${photoFile!!.absolutePath}", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    private fun capturarFoto(remito: String) {
+        val imageFileName = "foto_$remito.jpg"
+        photoFile = File(getExternalFilesDir(null), imageFileName)
+        val photoUri = FileProvider.getUriForFile(
+            this,
+            "$packageName.provider",
+            photoFile!!
+        )
+        takePictureLauncher.launch(photoUri)
+    }
 
     private val requestPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
@@ -52,20 +84,43 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+        checkCameraPermission()
+
         setContent {
             QRScannerAppTheme {
                 Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
-                    QRScannerScreen(
-                        modifier = Modifier.padding(innerPadding),
-                        onScanClick = { checkCameraPermission() },
-                        qrResult = qrResult
-                    )
+                    if (qrResult != null) {
+                        FormularioDespacho(
+                            qrData = qrResult!!,
+                            onGuardar = { cantidad, responsable, observaciones ->
+                                val pedido = Pedido(
+                                    remito = qrResult!!,
+                                    cantidadBolsas = cantidad,
+                                    responsable = responsable,
+                                    observaciones = observaciones
+                                )
+
+                                guardarPedido(pedido)
+                                capturarFoto(pedido.remito)
+
+                                qrResult = null
+                                checkCameraPermission()
+                            }
+                        )
+                    } else {
+                        QRScannerScreen(
+                            modifier = Modifier.padding(innerPadding),
+                            onScanClick = {},
+                            qrResult = null
+                        )
+                    }
                 }
             }
         }
-    }
+    } // ← ESTA llave es la que te falta
 
-    private fun checkCameraPermission() {
+
+        private fun checkCameraPermission() {
         when {
             ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED -> {
                 startQrScanner()
@@ -80,6 +135,18 @@ class MainActivity : ComponentActivity() {
             }
         }
     }
+    private fun guardarPedido(pedido: Pedido) {
+        val gson = Gson()
+        val json = gson.toJson(pedido)
+
+        val fileName = "pedido_${System.currentTimeMillis()}.json"
+        val file = File(getExternalFilesDir(null), fileName)
+
+        file.writeText(json)
+
+        println("Archivo guardado en: ${file.absolutePath}")
+    }
+
 
     private fun startQrScanner() {
         val options = ScanOptions()
@@ -88,6 +155,7 @@ class MainActivity : ComponentActivity() {
         options.setCameraId(0) // Cámara trasera
         options.setBeepEnabled(true)
         options.setBarcodeImageEnabled(true)
+        options.setCaptureActivity(com.journeyapps.barcodescanner.CaptureActivity::class.java)
         barcodeLauncher.launch(options.createScanIntent(this))
     }
 }
@@ -99,11 +167,29 @@ fun QRScannerScreen(modifier: Modifier = Modifier, onScanClick: () -> Unit, qrRe
         verticalArrangement = Arrangement.Center,
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        Button(onClick = onScanClick) {
-            Text("Escanear QR")
+        Button(
+            onClick = onScanClick,
+            shape = RoundedCornerShape(50), // Más redondeado
+            colors = ButtonDefaults.buttonColors(
+                containerColor = Color(0xFF1A73E8), // Azul institucional fuerte
+                contentColor = Color.White
+            ),
+            modifier = Modifier
+                .padding(horizontal = 32.dp, vertical = 8.dp)
+                .height(50.dp)
+                .width(200.dp) // Fijamos ancho para que se vea más profesional
+        ) {
+            Text(
+                text = "Escanear QR",
+                fontSize = 16.sp // ← así es como se debe usar cuando importás `sp`
+            )
         }
+
         if (qrResult != null) {
-            Text("Resultado: $qrResult", modifier = Modifier.padding(top = 16.dp))
+            Text(
+                text = "Resultado: $qrResult",
+                modifier = Modifier.padding(top = 16.dp)
+            )
         }
     }
 }
