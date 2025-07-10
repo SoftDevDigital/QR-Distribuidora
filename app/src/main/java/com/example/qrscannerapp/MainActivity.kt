@@ -37,8 +37,12 @@ import com.example.qrscannerapp.FormularioDespacho
 import com.google.gson.Gson
 import java.io.File
 import androidx.core.content.FileProvider
+import com.example.qrscannerapp.PedidosListScreen
+import android.content.Intent
 
+private var mostrarListaPedidos by mutableStateOf(false)
 
+data class PedidoConFecha(val pedido: Pedido, val fechaCreacion: Long)
 class MainActivity : ComponentActivity() {
     private var qrResult by mutableStateOf<String?>(null)
 
@@ -48,7 +52,9 @@ class MainActivity : ComponentActivity() {
         ActivityResultContracts.TakePicture()
     ) { success ->
         if (success && photoFile != null) {
-            Toast.makeText(this, "Foto guardada en: ${photoFile!!.absolutePath}", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, "✅ Foto guardada en: ${photoFile!!.absolutePath}", Toast.LENGTH_LONG).show()
+        } else {
+            Toast.makeText(this, "❌ No se tomó la foto o hubo un error", Toast.LENGTH_LONG).show()
         }
     }
 
@@ -62,6 +68,30 @@ class MainActivity : ComponentActivity() {
         )
         takePictureLauncher.launch(photoUri)
     }
+
+
+
+    private fun cargarPedidosGuardados(): List<PedidoConFecha> {
+        val pedidos = mutableListOf<PedidoConFecha>()
+        val filesDir = getExternalFilesDir(null)
+        val gson = Gson()
+
+        filesDir?.listFiles()?.forEach { file ->
+            if (file.name.startsWith("pedido_") && file.extension == "json") {
+                try {
+                    val timestamp = file.name.removePrefix("pedido_").removeSuffix(".json").toLong()
+                    val contenido = file.readText()
+                    val pedido = gson.fromJson(contenido, Pedido::class.java)
+                    pedidos.add(PedidoConFecha(pedido, timestamp))
+                } catch (e: Exception) {
+                    e.printStackTrace()
+                }
+            }
+        }
+
+        return pedidos.sortedByDescending { it.fechaCreacion }
+    }
+
 
     private val requestPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
@@ -89,30 +119,48 @@ class MainActivity : ComponentActivity() {
         setContent {
             QRScannerAppTheme {
                 Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
-                    if (qrResult != null) {
-                        FormularioDespacho(
-                            qrData = qrResult!!,
-                            onGuardar = { cantidad, responsable, observaciones ->
-                                val pedido = Pedido(
-                                    remito = qrResult!!,
-                                    cantidadBolsas = cantidad,
-                                    responsable = responsable,
-                                    observaciones = observaciones
-                                )
+                    when {
+                        qrResult != null -> {
+                            FormularioDespacho(
+                                qrData = qrResult!!,
+                                onGuardar = { cantidad, responsable, observaciones ->
+                                    val imageFileName = "foto_${qrResult}.jpg"
+                                    val imageFile = File(getExternalFilesDir(null), imageFileName)
 
-                                guardarPedido(pedido)
-                                capturarFoto(pedido.remito)
+                                    val pedido = Pedido(
+                                        remito = qrResult!!,
+                                        cantidadBolsas = cantidad,
+                                        responsable = responsable,
+                                        observaciones = observaciones,
+                                        fotoPath = imageFile.absolutePath
+                                    )
 
+                                    guardarPedido(pedido)
+                                    capturarFoto(pedido.remito)
+
+                                    qrResult = null
+
+                                }
+                            )
+                        }
+
+                        mostrarListaPedidos -> {
+                            val pedidos = cargarPedidosGuardados()
+                            PedidosListScreen(
+                                pedidos = pedidos,
+                                onVolverClick = { mostrarListaPedidos = false },
+                                onCompartirClick = { file -> compartirArchivo(file) }
+                            )
+                        }
+
+                        else -> {
+                            QRScannerScreen(
+                                modifier = Modifier.padding(innerPadding),
+                                onScanClick = { checkCameraPermission() },
+                                onVerPedidosClick = { mostrarListaPedidos = true },
                                 qrResult = null
-                                checkCameraPermission()
-                            }
-                        )
-                    } else {
-                        QRScannerScreen(
-                            modifier = Modifier.padding(innerPadding),
-                            onScanClick = {},
-                            qrResult = null
-                        )
+                            )
+                        }
                     }
                 }
             }
@@ -135,13 +183,24 @@ class MainActivity : ComponentActivity() {
             }
         }
     }
+
+    private fun compartirArchivo(file: File) {
+        val uri = FileProvider.getUriForFile(this, "$packageName.provider", file)
+        val intent = Intent(Intent.ACTION_SEND).apply {
+            type = if (file.extension == "json") "application/json" else "image/*"
+            putExtra(Intent.EXTRA_STREAM, uri)
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        }
+        startActivity(Intent.createChooser(intent, "Compartir con..."))
+    }
+
     private fun guardarPedido(pedido: Pedido) {
         val gson = Gson()
         val json = gson.toJson(pedido)
 
         val fileName = "pedido_${System.currentTimeMillis()}.json"
         val file = File(getExternalFilesDir(null), fileName)
-//effeef
+
         file.writeText(json)
 
         println("Archivo guardado en: ${file.absolutePath}")
@@ -161,7 +220,12 @@ class MainActivity : ComponentActivity() {
 }
 
 @Composable
-fun QRScannerScreen(modifier: Modifier = Modifier, onScanClick: () -> Unit, qrResult: String? = null) {
+fun QRScannerScreen(
+    modifier: Modifier = Modifier,
+    onScanClick: () -> Unit,
+    onVerPedidosClick: () -> Unit,
+    qrResult: String? = null
+) {
     Column(
         modifier = modifier.fillMaxSize(),
         verticalArrangement = Arrangement.Center,
@@ -169,20 +233,32 @@ fun QRScannerScreen(modifier: Modifier = Modifier, onScanClick: () -> Unit, qrRe
     ) {
         Button(
             onClick = onScanClick,
-            shape = RoundedCornerShape(50), // Más redondeado
+            shape = RoundedCornerShape(50),
             colors = ButtonDefaults.buttonColors(
-                containerColor = Color(0xFF1A73E8), // Azul institucional fuerte
+                containerColor = Color(0xFF1A73E8),
                 contentColor = Color.White
             ),
             modifier = Modifier
                 .padding(horizontal = 32.dp, vertical = 8.dp)
                 .height(50.dp)
-                .width(200.dp) // Fijamos ancho para que se vea más profesional
+                .width(200.dp)
         ) {
-            Text(
-                text = "Escanear QR",
-                fontSize = 16.sp // ← así es como se debe usar cuando importás `sp`
-            )
+            Text(text = "Escanear QR", fontSize = 16.sp)
+        }
+
+        Button( // ← este es el nuevo botón
+            onClick = onVerPedidosClick,
+            shape = RoundedCornerShape(50),
+            colors = ButtonDefaults.buttonColors(
+                containerColor = Color(0xFF34A853),
+                contentColor = Color.White
+            ),
+            modifier = Modifier
+                .padding(horizontal = 32.dp, vertical = 8.dp)
+                .height(50.dp)
+                .width(200.dp)
+        ) {
+            Text(text = "Ver pedidos", fontSize = 16.sp)
         }
 
         if (qrResult != null) {
@@ -198,6 +274,10 @@ fun QRScannerScreen(modifier: Modifier = Modifier, onScanClick: () -> Unit, qrRe
 @Composable
 fun QRScannerPreview() {
     QRScannerAppTheme {
-        QRScannerScreen(onScanClick = {})
+        QRScannerScreen(
+            onScanClick = {},
+            onVerPedidosClick = {}, // ✅ agregado
+            qrResult = null
+        )
     }
 }

@@ -5,5 +5,6 @@ data class Pedido(
     val remito: String,
     val cantidadBolsas: String,
     val responsable: String,
-    val observaciones: String
+    val observaciones: String,
+    val fotoPath: String? = null
 )
