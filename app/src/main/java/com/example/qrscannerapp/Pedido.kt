@@ -1,4 +1,3 @@
-// File: Pedido.kt (podés crearlo en el mismo paquete com.example.qrscannerapp)
 package com.example.qrscannerapp
 
 data class Pedido(
@@ -6,5 +5,12 @@ data class Pedido(
     val cantidadBolsas: String,
     val responsable: String,
     val observaciones: String,
+    val cantidadCajas: String = "",
+    val cantidadBolsones: String = "",
+    val responsableArmado: String = "",
+    val responsableRevision: String = "",
+    val transporte: String = "",
+    val fecha: String = "",
+    val cliente: String = "",
     val fotoPath: String? = null
 )

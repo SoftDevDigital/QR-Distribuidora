@@ -69,8 +69,6 @@ class MainActivity : ComponentActivity() {
         takePictureLauncher.launch(photoUri)
     }
 
-
-
     private fun cargarPedidosGuardados(): List<PedidoConFecha> {
         val pedidos = mutableListOf<PedidoConFecha>()
         val filesDir = getExternalFilesDir(null)
@@ -92,7 +90,6 @@ class MainActivity : ComponentActivity() {
         return pedidos.sortedByDescending { it.fechaCreacion }
     }
 
-
     private val requestPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
     ) { isGranted ->
@@ -106,7 +103,7 @@ class MainActivity : ComponentActivity() {
     ) { result ->
         val contents = result.data?.getStringExtra("SCAN_RESULT")
         if (contents != null) {
-            qrResult = contents // Actualiza el estado con el resultado
+            qrResult = contents
             println("Código QR escaneado: $contents")
         }
     }
@@ -123,7 +120,7 @@ class MainActivity : ComponentActivity() {
                         qrResult != null -> {
                             FormularioDespacho(
                                 qrData = qrResult!!,
-                                onGuardar = { cantidad, responsable, observaciones ->
+                                onGuardar = { cantidad, responsable, observaciones, cantidadCajas, cantidadBolsas, cantidadBolsones, responsableArmado, responsableRevision, transporte, fecha, cliente ->
                                     val imageFileName = "foto_${qrResult}.jpg"
                                     val imageFile = File(getExternalFilesDir(null), imageFileName)
 
@@ -132,14 +129,19 @@ class MainActivity : ComponentActivity() {
                                         cantidadBolsas = cantidad,
                                         responsable = responsable,
                                         observaciones = observaciones,
+                                        cantidadCajas = cantidadCajas,
+                                        cantidadBolsones = cantidadBolsones,
+                                        responsableArmado = responsableArmado,
+                                        responsableRevision = responsableRevision,
+                                        transporte = transporte,
+                                        fecha = fecha,
+                                        cliente = cliente,
                                         fotoPath = imageFile.absolutePath
                                     )
 
                                     guardarPedido(pedido)
                                     capturarFoto(pedido.remito)
-
                                     qrResult = null
-
                                 }
                             )
                         }
@@ -165,16 +167,14 @@ class MainActivity : ComponentActivity() {
                 }
             }
         }
-    } // ← ESTA llave es la que te falta
+    }
 
-
-        private fun checkCameraPermission() {
+    private fun checkCameraPermission() {
         when {
             ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED -> {
                 startQrScanner()
             }
             ActivityCompat.shouldShowRequestPermissionRationale(this, Manifest.permission.CAMERA) -> {
-                // Mostrar un diálogo explicativo
                 Toast.makeText(this, "Se necesita permiso de cámara para escanear QR", Toast.LENGTH_SHORT).show()
                 requestPermissionLauncher.launch(Manifest.permission.CAMERA)
             }
@@ -206,12 +206,11 @@ class MainActivity : ComponentActivity() {
         println("Archivo guardado en: ${file.absolutePath}")
     }
 
-
     private fun startQrScanner() {
         val options = ScanOptions()
         options.setDesiredBarcodeFormats(ScanOptions.QR_CODE)
         options.setPrompt("Escanea el código QR")
-        options.setCameraId(0) // Cámara trasera
+        options.setCameraId(0)
         options.setBeepEnabled(true)
         options.setBarcodeImageEnabled(true)
         options.setCaptureActivity(com.journeyapps.barcodescanner.CaptureActivity::class.java)
@@ -246,7 +245,7 @@ fun QRScannerScreen(
             Text(text = "Escanear QR", fontSize = 16.sp)
         }
 
-        Button( // ← este es el nuevo botón
+        Button(
             onClick = onVerPedidosClick,
             shape = RoundedCornerShape(50),
             colors = ButtonDefaults.buttonColors(
@@ -276,7 +275,7 @@ fun QRScannerPreview() {
     QRScannerAppTheme {
         QRScannerScreen(
             onScanClick = {},
-            onVerPedidosClick = {}, // ✅ agregado
+            onVerPedidosClick = {},
             qrResult = null
         )
     }
