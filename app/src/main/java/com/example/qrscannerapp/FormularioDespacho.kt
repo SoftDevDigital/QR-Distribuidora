@@ -10,7 +10,9 @@ import androidx.compose.ui.Alignment
 @Composable
 fun FormularioDespacho(
     qrData: String,
-    onGuardar: (cantidad: String, responsable: String, observaciones: String) -> Unit
+    onGuardar: (cantidad: String, responsable: String, observaciones: String) -> Unit,
+    onTomarFoto: () -> Unit
+
 ) {
     var cantidad by remember { mutableStateOf("") }
     var responsable by remember { mutableStateOf("") }
@@ -50,6 +52,19 @@ fun FormularioDespacho(
         )
 
         Spacer(modifier = Modifier.height(24.dp))
+
+        Text("Fotos (máx. 3)", style = MaterialTheme.typography.titleMedium)
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        Button(
+            onClick = { onTomarFoto() },
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Text("📷 Tomar Foto")
+        }
+
+        Spacer(modifier = Modifier.height(24.dp)) // Esto separa visualmente los botones del de "Guardar"
 
         Button(
             onClick = {

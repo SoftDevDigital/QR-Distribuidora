@@ -6,5 +6,5 @@ data class Pedido(
     val cantidadBolsas: String,
     val responsable: String,
     val observaciones: String,
-    val fotoPath: String? = null
+    val fotosPath: List<String> = emptyList()
 )

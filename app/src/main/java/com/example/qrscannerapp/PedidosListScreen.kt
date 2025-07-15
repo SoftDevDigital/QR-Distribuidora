@@ -52,7 +52,7 @@ fun PedidosListScreen(
                         Text("Responsable: ${pedido.responsable}")
                         Text("Observaciones: ${pedido.observaciones}")
 
-                        pedido.fotoPath?.let { path ->
+                        pedido.fotosPath.forEach { path ->
                             val bitmap = BitmapFactory.decodeFile(path)
                             bitmap?.let {
                                 Image(
@@ -67,7 +67,11 @@ fun PedidosListScreen(
                         }
 
                         val nombreJson = "pedido_${item.fechaCreacion}.json"
-                        val archivoJson = File(File(pedido.fotoPath).parentFile, nombreJson)
+                        val archivoJson = if (pedido.fotosPath.isNotEmpty()) {
+                            File(File(pedido.fotosPath.first()).parentFile, nombreJson)
+                        } else {
+                            File(nombreJson) // fallback para evitar crash si no hay fotos
+                        }
 
                         Button(
                             onClick = { onCompartirClick(archivoJson) },
@@ -78,14 +82,14 @@ fun PedidosListScreen(
                             Text("📤 Compartir JSON")
                         }
 
-                        pedido.fotoPath?.let { path ->
+                        pedido.fotosPath.forEachIndexed { index, path ->
                             Button(
                                 onClick = { onCompartirClick(File(path)) },
                                 modifier = Modifier
                                     .padding(top = 8.dp)
                                     .fillMaxWidth()
                             ) {
-                                Text("🖼️ Compartir Foto")
+                                Text("🖼️ Compartir Foto ${index + 1}")
                             }
                         }
                     }

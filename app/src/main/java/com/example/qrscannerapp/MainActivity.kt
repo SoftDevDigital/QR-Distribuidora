@@ -41,7 +41,8 @@ import com.example.qrscannerapp.PedidosListScreen
 import android.content.Intent
 
 private var mostrarListaPedidos by mutableStateOf(false)
-
+private val photoFiles = mutableListOf<File>()
+private var numeroFotoActual = 1
 data class PedidoConFecha(val pedido: Pedido, val fechaCreacion: Long)
 class MainActivity : ComponentActivity() {
     private var qrResult by mutableStateOf<String?>(null)
@@ -52,21 +53,25 @@ class MainActivity : ComponentActivity() {
         ActivityResultContracts.TakePicture()
     ) { success ->
         if (success && photoFile != null) {
-            Toast.makeText(this, "✅ Foto guardada en: ${photoFile!!.absolutePath}", Toast.LENGTH_LONG).show()
+            photoFiles.add(photoFile!!)
+            Toast.makeText(this, "✅ Foto $numeroFotoActual guardada", Toast.LENGTH_SHORT).show()
+            numeroFotoActual++
         } else {
-            Toast.makeText(this, "❌ No se tomó la foto o hubo un error", Toast.LENGTH_LONG).show()
+            Toast.makeText(this, "❌ No se tomó la foto o hubo un error", Toast.LENGTH_SHORT).show()
         }
     }
 
     private fun capturarFoto(remito: String) {
-        val imageFileName = "foto_$remito.jpg"
-        photoFile = File(getExternalFilesDir(null), imageFileName)
-        val photoUri = FileProvider.getUriForFile(
-            this,
-            "$packageName.provider",
-            photoFile!!
-        )
-        takePictureLauncher.launch(photoUri)
+        if (numeroFotoActual > 3) {
+            Toast.makeText(this, "📷 Ya se tomaron las 3 fotos", Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        val nombreArchivo = "foto_${remito}_$numeroFotoActual.jpg"
+        val archivo = File(getExternalFilesDir(null), nombreArchivo)
+        photoFile = archivo
+        val uri = FileProvider.getUriForFile(this, "$packageName.provider", archivo)
+        takePictureLauncher.launch(uri)
     }
 
 
@@ -121,25 +126,25 @@ class MainActivity : ComponentActivity() {
                 Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
                     when {
                         qrResult != null -> {
+                            numeroFotoActual = 1
+                            photoFiles.clear()
+
                             FormularioDespacho(
                                 qrData = qrResult!!,
                                 onGuardar = { cantidad, responsable, observaciones ->
-                                    val imageFileName = "foto_${qrResult}.jpg"
-                                    val imageFile = File(getExternalFilesDir(null), imageFileName)
-
                                     val pedido = Pedido(
                                         remito = qrResult!!,
                                         cantidadBolsas = cantidad,
                                         responsable = responsable,
                                         observaciones = observaciones,
-                                        fotoPath = imageFile.absolutePath
+                                        fotosPath = photoFiles.map { it.absolutePath }
                                     )
-
                                     guardarPedido(pedido)
-                                    capturarFoto(pedido.remito)
-
                                     qrResult = null
-
+                                    photoFiles.clear()
+                                },
+                                onTomarFoto = {
+                                    capturarFoto(qrResult!!)
                                 }
                             )
                         }
