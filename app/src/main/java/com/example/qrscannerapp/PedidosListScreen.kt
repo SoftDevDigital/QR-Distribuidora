@@ -22,16 +22,31 @@ import com.example.qrscannerapp.Pedido
 fun PedidosListScreen(
     pedidos: List<PedidoConFecha>,
     onVolverClick: () -> Unit,
-    onCompartirClick: (File) -> Unit
+    onCompartirClick: (File) -> Unit,
+    onBorrarTodosClick: () -> Unit // ✅ nuevo parámetro
 ) {
     Column(modifier = Modifier.fillMaxSize()) {
-        Button(
-            onClick = onVolverClick,
+        Row(
             modifier = Modifier
                 .padding(16.dp)
-                .fillMaxWidth()
+                .fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween
         ) {
-            Text("← Volver al escáner")
+            Button(
+                onClick = onVolverClick,
+                modifier = Modifier.weight(1f)
+            ) {
+                Text("← Volver")
+            }
+
+            Spacer(modifier = Modifier.width(8.dp))
+
+            Button(
+                onClick = onBorrarTodosClick,
+                modifier = Modifier.weight(1f)
+            ) {
+                Text("🗑️ Borrar todos")
+            }
         }
 
         LazyColumn {
@@ -70,7 +85,7 @@ fun PedidosListScreen(
                         val archivoJson = if (pedido.fotosPath.isNotEmpty()) {
                             File(File(pedido.fotosPath.first()).parentFile, nombreJson)
                         } else {
-                            File(nombreJson) // fallback para evitar crash si no hay fotos
+                            File(nombreJson)
                         }
 
                         Button(
