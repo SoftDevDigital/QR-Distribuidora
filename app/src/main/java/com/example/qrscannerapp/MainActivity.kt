@@ -1,8 +1,12 @@
 package com.example.qrscannerapp
 
 import android.Manifest
+import android.content.ContentValues
 import android.content.pm.PackageManager
+import android.os.Build
 import android.os.Bundle
+import android.os.Environment
+import android.provider.MediaStore
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -38,6 +42,7 @@ import androidx.compose.ui.unit.sp
 import com.example.qrscannerapp.FormularioDespacho
 import com.google.gson.Gson
 import java.io.File
+import java.io.FileOutputStream
 import androidx.core.content.FileProvider
 import com.example.qrscannerapp.PedidosListScreen
 import android.content.Intent
@@ -51,6 +56,7 @@ import com.google.android.gms.auth.api.signin.GoogleSignInAccount
 import com.google.android.gms.tasks.Task
 import com.google.android.gms.auth.GoogleAuthUtil
 import com.google.android.gms.common.api.ApiException
+import java.io.IOException
 
 private var mostrarListaPedidos by mutableStateOf(false)
 private val photoFiles = mutableListOf<File>()
@@ -60,15 +66,14 @@ data class PedidoConFecha(val pedido: Pedido, val fechaCreacion: Long)
 class MainActivity : ComponentActivity() {
     private val RC_SIGN_IN = 1001
     private var qrResult by mutableStateOf<String?>(null)
-
     private var photoFile: File? = null
 
     private val takePictureLauncher = registerForActivityResult(
         ActivityResultContracts.TakePicture()
     ) { success ->
-        if (success && photoFile != null) {
-            photoFiles.add(photoFile!!)
-            Toast.makeText(this, "✅ Foto $numeroFotoActual guardada", Toast.LENGTH_SHORT).show()
+        if (success && photoFile != null && qrResult != null) {
+            savePhotoToGalleryAndBackup(qrResult!!, photoFile!!)
+            Toast.makeText(this, "✅ Foto $numeroFotoActual guardada en galería y respaldo", Toast.LENGTH_SHORT).show()
             numeroFotoActual++
         } else {
             Toast.makeText(this, "❌ No se tomó la foto o hubo un error", Toast.LENGTH_SHORT).show()
@@ -85,20 +90,60 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    private fun savePhotoToGalleryAndBackup(remito: String, photoFile: File) {
+        val photoName = "foto_${remito}_${numeroFotoActual}.jpg"
+        val timestamp = System.currentTimeMillis()
+
+        // 1. Guardar en la galería usando MediaStore
+        val values = ContentValues().apply {
+            put(MediaStore.Images.Media.DISPLAY_NAME, photoName)
+            put(MediaStore.Images.Media.MIME_TYPE, "image/jpeg")
+            put(MediaStore.Images.Media.DATE_ADDED, timestamp)
+            put(MediaStore.Images.Media.DATE_TAKEN, timestamp)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                put(MediaStore.Images.Media.RELATIVE_PATH, Environment.DIRECTORY_PICTURES + "/QRScannerApp")
+            } else {
+                put(MediaStore.Images.Media.DATA, photoFile.absolutePath)
+            }
+        }
+
+        val uri = contentResolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values)
+        uri?.let {
+            contentResolver.openOutputStream(it)?.use { outputStream ->
+                File(photoFile.absolutePath).inputStream().use { inputStream ->
+                    inputStream.copyTo(outputStream)
+                }
+            }
+        }
+
+        // 2. Guardar en una carpeta personalizada (respaldo)
+        val backupDir = File(getExternalFilesDir(null), "Fotos")
+        if (!backupDir.exists()) backupDir.mkdirs()
+
+        val backupFile = File(backupDir, photoName)
+        try {
+            File(photoFile.absolutePath).copyTo(backupFile, overwrite = true)
+            photoFiles.remove(photoFile) // Reemplazar el archivo temporal por el de respaldo
+            photoFiles.add(backupFile)
+            photoFile?.delete() // Eliminar archivo temporal
+        } catch (e: IOException) {
+            Log.e("SAVE_PHOTO", "❌ Error al guardar copia de respaldo: ${e.message}")
+        }
+    }
+
     private fun capturarFoto(remito: String) {
         if (numeroFotoActual > 3) {
             Toast.makeText(this, "📷 Ya se tomaron las 3 fotos", Toast.LENGTH_SHORT).show()
             return
         }
 
-        val nombreArchivo = "foto_${remito}_$numeroFotoActual.jpg"
+        val nombreArchivo = "temp_foto_${remito}_${numeroFotoActual}.jpg"
         val archivo = File(getExternalFilesDir(null), nombreArchivo)
         photoFile = archivo
         val uri = FileProvider.getUriForFile(this, "$packageName.provider", archivo)
         takePictureLauncher.launch(uri)
     }
 
-    // Mueve la función fuera de onCreate
     private fun startQrScanner() {
         val options = ScanOptions()
         options.setDesiredBarcodeFormats(ScanOptions.QR_CODE)
@@ -139,12 +184,10 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-
     private fun enviarPedidoAGoogleSheets(pedido: Pedido) {
         CoroutineScope(Dispatchers.IO).launch {
             try {
-                val url =
-                    URL("https://script.google.com/macros/s/AKfycbwv6BS2WCAjU11HS08ZdCltqRxXCsMjz01BNQiUdj4cE9CNXNnB-zhREIvhG2SEfcd_8w/exec") // Reemplazá con tu URL
+                val url = URL("https://script.google.com/macros/s/AKfycbwv6BS2WCAjU11HS08ZdCltqRxXCsMjz01BNQiUdj4cE9CNXNnB-zhREIvhG2SEfcd_8w/exec")
                 val json = Gson().toJson(pedido)
 
                 val connection = url.openConnection() as HttpURLConnection
@@ -167,7 +210,6 @@ class MainActivity : ComponentActivity() {
             }
         }
     }
-
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -201,22 +243,18 @@ class MainActivity : ComponentActivity() {
 
                                     CoroutineScope(Dispatchers.IO).launch {
                                         try {
-                                            // Subir cada foto a Drive y guardar su URL
                                             photoFiles.forEachIndexed { index, photoFile ->
-                                                val photoFileName =
-                                                    "foto_${qrResult}_${index + 1}.jpg"
-                                                val uploadedPhotoId =
-                                                    DriveUploader.uploadFileAndGetId(
-                                                        context = this@MainActivity,
-                                                        localFilePath = photoFile.absolutePath,
-                                                        fileName = photoFileName,
-                                                        folderId = folderId,
-                                                        mimeType = "image/jpeg"
-                                                    )
+                                                val photoFileName = "foto_${qrResult}_${index + 1}.jpg"
+                                                val uploadedPhotoId = DriveUploader.uploadFileAndGetId(
+                                                    context = this@MainActivity,
+                                                    localFilePath = photoFile.absolutePath,
+                                                    fileName = photoFileName,
+                                                    folderId = folderId,
+                                                    mimeType = "image/jpeg"
+                                                )
                                                 uploadedUrls.add("https://drive.google.com/file/d/$uploadedPhotoId/view")
                                             }
 
-                                            // Crear el pedido final con rutas y URLs
                                             val pedido = Pedido(
                                                 remito = qrResult!!,
                                                 cantidadBolsas = cantidad,
@@ -229,10 +267,7 @@ class MainActivity : ComponentActivity() {
                                             guardarPedido(pedido)
 
                                         } catch (e: Exception) {
-                                            Log.e(
-                                                "GUARDAR",
-                                                "❌ Error al guardar pedido: ${e.message}"
-                                            )
+                                            Log.e("GUARDAR", "❌ Error al guardar pedido: ${e.message}")
                                         }
 
                                         withContext(Dispatchers.Main) {
@@ -247,7 +282,6 @@ class MainActivity : ComponentActivity() {
                                 }
                             )
                         }
-
 
                         mostrarListaPedidos -> {
                             val pedidos = cargarPedidosGuardados()
@@ -276,14 +310,11 @@ class MainActivity : ComponentActivity() {
     private fun handleSignInResult(completedTask: Task<GoogleSignInAccount>) {
         try {
             val account = completedTask.getResult(ApiException::class.java)
-
             account.account?.let { accountInfo ->
                 val scope = "oauth2:${DriveScopes.DRIVE_FILE} ${DriveScopes.DRIVE}"
                 val token = GoogleAuthUtil.getToken(this, accountInfo, scope)
-
                 Log.d("ACCESS_TOKEN", "Token: $token")
             }
-
         } catch (e: ApiException) {
             Log.e("GOOGLE_SIGN_IN", "Sign in failed", e)
         }
@@ -364,7 +395,6 @@ class MainActivity : ComponentActivity() {
         val folderId = "1rofvNaKGrqnw163RNw2YoxnKTgDqqrlY"
         CoroutineScope(Dispatchers.IO).launch {
             try {
-                // Subir JSON
                 DriveUploader.uploadFile(
                     context = this@MainActivity,
                     localFilePath = file.absolutePath,
@@ -373,7 +403,6 @@ class MainActivity : ComponentActivity() {
                     mimeType = "application/json"
                 )
 
-                // Subir fotos a Drive
                 pedido.fotosPath.forEachIndexed { index, photoPath ->
                     val photoFile = File(photoPath)
                     val photoName = "foto_${pedido.remito}_${index + 1}.jpg"
@@ -386,7 +415,6 @@ class MainActivity : ComponentActivity() {
                         mimeType = "image/jpeg"
                     )
                 }
-
             } catch (e: Exception) {
                 Log.e("UPLOAD", "❌ Error subiendo archivos: ${e.message}")
             }
@@ -420,7 +448,7 @@ class MainActivity : ComponentActivity() {
                 Text(text = "Escanear QR", fontSize = 16.sp)
             }
 
-            Button( // ← este es el nuevo botón
+            Button(
                 onClick = onVerPedidosClick,
                 shape = RoundedCornerShape(50),
                 colors = ButtonDefaults.buttonColors(
