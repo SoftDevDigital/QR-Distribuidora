@@ -7,9 +7,13 @@ import android.os.Build
 import android.os.Bundle
 import android.os.Environment
 import android.provider.MediaStore
+import android.content.Context
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
@@ -211,6 +215,103 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    private fun enviarPedidoAGoogleSheetsConFecha(pedido: Pedido, fechaCreacion: Long) {
+        CoroutineScope(Dispatchers.IO).launch {
+            try {
+                val url = URL("https://script.google.com/macros/s/AKfycbwv6BS2WCAjU11HS08ZdCltqRxXCsMjz01BNQiUdj4cE9CNXNnB-zhREIvhG2SEfcd_8w/exec")
+
+                // Usar la fecha original
+                val dateStr = SimpleDateFormat("dd/MM/yyyy HH:mm", Locale.getDefault()).format(Date(fechaCreacion))
+
+                val jsonMap = mutableMapOf<String, Any>(
+                    "remito" to pedido.remito,
+                    "cantidadBolsas" to pedido.cantidadBolsas,
+                    "responsable" to pedido.responsable,
+                    "observaciones" to pedido.observaciones,
+                    "fecha" to dateStr // Este campo debes aceptarlo en tu Apps Script
+                )
+
+                val gson = Gson()
+                val json = gson.toJson(jsonMap)
+
+                val connection = url.openConnection() as HttpURLConnection
+                connection.requestMethod = "POST"
+                connection.setRequestProperty("Content-Type", "application/json")
+                connection.doOutput = true
+                connection.outputStream.use { os -> os.write(json.toByteArray(Charsets.UTF_8)) }
+
+                val responseCode = connection.responseCode
+                if (responseCode == HttpURLConnection.HTTP_OK) {
+                    Log.d("GOOGLE_SHEETS", "✅ Enviado con fecha original correctamente")
+                } else {
+                    Log.e("GOOGLE_SHEETS", "❌ Error al enviar con fecha: Código $responseCode")
+                }
+
+            } catch (e: Exception) {
+                Log.e("GOOGLE_SHEETS", "❌ Excepción al enviar con fecha: ${e.message}")
+            }
+        }
+    }
+
+    private fun sincronizarPedidosPendientes(context: Context) {
+        val pedidos = cargarPedidosGuardados()
+
+        CoroutineScope(Dispatchers.IO).launch {
+            for (pedidoConFecha in pedidos) {
+                val pedido = pedidoConFecha.pedido
+                val jsonFile = File(getExternalFilesDir(null), "pedido_${pedidoConFecha.fechaCreacion}.json")
+                val sentMarker = File(getExternalFilesDir(null), "pedido_${pedidoConFecha.fechaCreacion}.sent")
+
+                if (!sentMarker.exists() && jsonFile.exists()) {
+                    // 1. Enviar a Google Sheets
+                    enviarPedidoAGoogleSheetsConFecha(pedido, pedidoConFecha.fechaCreacion)
+
+                    // 2. Subir JSON
+                    try {
+                        DriveUploader.uploadFile(
+                            context,
+                            jsonFile.absolutePath,
+                            jsonFile.name,
+                            "1rofvNaKGrqnw163RNw2YoxnKTgDqqrlY",
+                            "application/json"
+                        )
+                    } catch (e: Exception) {
+                        Log.e("SYNC_JSON", "❌ Error al subir JSON: ${e.message}")
+                    }
+
+                    // 3. Subir fotos
+                    pedido.fotosPath.forEachIndexed { index, photoPath ->
+                        val file = File(photoPath)
+                        if (file.exists()) {
+                            val nombreFoto = "foto_${pedido.remito}_${index + 1}.jpg"
+                            try {
+                                DriveUploader.uploadFile(
+                                    context,
+                                    photoPath,
+                                    nombreFoto,
+                                    "1rofvNaKGrqnw163RNw2YoxnKTgDqqrlY",
+                                    "image/jpeg"
+                                )
+                            } catch (e: Exception) {
+                                Log.e("SYNC_PHOTO", "❌ Error al subir foto: ${e.message}")
+                            }
+                        }
+                    }
+
+                    // 4. Crear archivo de marca para evitar reenvío
+                    sentMarker.writeText("enviado")
+                }
+            }
+
+            withContext(Dispatchers.Main) {
+                Toast.makeText(context, "✅ Pedidos sincronizados", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+
+
+
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
@@ -224,8 +325,8 @@ class MainActivity : ComponentActivity() {
             .build()
 
         val googleSignInClient = GoogleSignIn.getClient(this, gso)
-        val signInIntent = googleSignInClient.signInIntent
-        startActivityForResult(signInIntent, RC_SIGN_IN)
+        //val signInIntent = googleSignInClient.signInIntent
+        //startActivityForResult(signInIntent, RC_SIGN_IN)
 
         setContent {
             QRScannerAppTheme {
@@ -289,7 +390,8 @@ class MainActivity : ComponentActivity() {
                                 pedidos = pedidos,
                                 onVolverClick = { mostrarListaPedidos = false },
                                 onCompartirClick = { file -> compartirArchivo(file) },
-                                onBorrarTodosClick = { borrarTodosLosPedidos() }
+                                onBorrarTodosClick = { borrarTodosLosPedidos() } ,
+                                        onSincronizarClick = { sincronizarPedidosPendientes(this) }
                             )
                         }
 
@@ -384,13 +486,14 @@ class MainActivity : ComponentActivity() {
 
     private fun guardarPedido(pedido: Pedido) {
         val gson = Gson()
+        val timestamp = System.currentTimeMillis()
         val json = gson.toJson(pedido)
 
-        val fileName = "pedido_${System.currentTimeMillis()}.json"
+        val fileName = "pedido_${timestamp}.json"
         val file = File(getExternalFilesDir(null), fileName)
         file.writeText(json)
 
-        enviarPedidoAGoogleSheets(pedido)
+        enviarPedidoAGoogleSheetsConFecha(pedido, timestamp) // ⬅️ usa el timestamp real
 
         val folderId = "1rofvNaKGrqnw163RNw2YoxnKTgDqqrlY"
         CoroutineScope(Dispatchers.IO).launch {
@@ -415,6 +518,10 @@ class MainActivity : ComponentActivity() {
                         mimeType = "image/jpeg"
                     )
                 }
+
+                // Marcar como sincronizado
+                val sentMarker = File(getExternalFilesDir(null), "pedido_${timestamp}.sent")
+                sentMarker.writeText("enviado")
             } catch (e: Exception) {
                 Log.e("UPLOAD", "❌ Error subiendo archivos: ${e.message}")
             }

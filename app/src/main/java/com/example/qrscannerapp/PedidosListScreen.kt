@@ -23,7 +23,8 @@ fun PedidosListScreen(
     pedidos: List<PedidoConFecha>,
     onVolverClick: () -> Unit,
     onCompartirClick: (File) -> Unit,
-    onBorrarTodosClick: () -> Unit // ✅ nuevo parámetro
+    onBorrarTodosClick: () -> Unit, // ✅ nuevo parámetro
+    onSincronizarClick: () -> Unit
 ) {
     Column(modifier = Modifier.fillMaxSize()) {
         Row(
@@ -40,6 +41,13 @@ fun PedidosListScreen(
             }
 
             Spacer(modifier = Modifier.width(8.dp))
+
+            Button(
+                onClick = onSincronizarClick,
+                modifier = Modifier.weight(1f)
+            ) {
+                Text("🔄 Sincronizar")
+            }
 
             Button(
                 onClick = onBorrarTodosClick,
