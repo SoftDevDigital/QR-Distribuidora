@@ -39,7 +39,7 @@ class ContinuousScanActivity : ComponentActivity() {
             startQrScanner() // Continúa escaneando
         } else {
             Log.w("SCAN", "Escaneo cancelado o sin resultado")
-            Toast.makeText(this, "Escaneo cancelado", Toast.LENGTH_SHORT).show()
+            showError("Escaneo cancelado o sin resultado")
         }
     }
 
@@ -49,7 +49,7 @@ class ContinuousScanActivity : ComponentActivity() {
         if (isGranted) {
             startQrScanner()
         } else {
-            Toast.makeText(this, "Permiso de cámara denegado", Toast.LENGTH_LONG).show()
+            showError("Permiso de cámara denegado")
         }
     }
 
@@ -64,13 +64,13 @@ class ContinuousScanActivity : ComponentActivity() {
             options.setDesiredBarcodeFormats(ScanOptions.QR_CODE)
             options.setPrompt("Escanea el código QR")
             options.setCameraId(0) // Cámara trasera
-            options.setBeepEnabled(true)
+            options.setBeepEnabled(true) // Habilita el sonido al escanear
             options.setBarcodeImageEnabled(true)
             options.setCaptureActivity(com.journeyapps.barcodescanner.CaptureActivity::class.java)
             barcodeLauncher.launch(options.createScanIntent(this))
         } catch (e: Exception) {
             Log.e("SCAN", "Error al iniciar el escáner: ${e.message}", e)
-            Toast.makeText(this, "Error al iniciar el escáner: ${e.message}", Toast.LENGTH_LONG).show()
+            showError("Error al iniciar el escáner: ${e.message}")
         }
     }
 
@@ -79,9 +79,7 @@ class ContinuousScanActivity : ComponentActivity() {
         val sheetUrl = sharedPreferences.getString("continuous_sheet_url", "") ?: ""
 
         if (sheetUrl.isEmpty()) {
-            runOnUiThread {
-                Toast.makeText(this, "❌ URL de Google Sheets no configurada", Toast.LENGTH_LONG).show()
-            }
+            showError("URL de Google Sheets no configurada")
             return
         }
 
@@ -110,15 +108,21 @@ class ContinuousScanActivity : ComponentActivity() {
                 } else {
                     Log.e("GOOGLE_SHEETS", "❌ Error al enviar remito $remito: Código $responseCode")
                     withContext(Dispatchers.Main) {
-                        Toast.makeText(this@ContinuousScanActivity, "❌ Error al registrar remito $remito", Toast.LENGTH_SHORT).show()
+                        showError("Error al registrar remito $remito: Código $responseCode")
                     }
                 }
             } catch (e: Exception) {
                 Log.e("GOOGLE_SHEETS", "❌ Excepción al enviar remito $remito: ${e.message}", e)
                 withContext(Dispatchers.Main) {
-                    Toast.makeText(this@ContinuousScanActivity, "❌ Error: ${e.message}", Toast.LENGTH_LONG).show()
+                    showError("Error al enviar remito: ${e.message}")
                 }
             }
+        }
+    }
+
+    private fun showError(message: String) {
+        runOnUiThread {
+            Toast.makeText(this, "Error: $message", Toast.LENGTH_LONG).show()
         }
     }
 

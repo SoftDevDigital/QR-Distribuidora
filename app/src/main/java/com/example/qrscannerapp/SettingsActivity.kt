@@ -14,6 +14,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.qrscannerapp.ui.theme.QRScannerAppTheme
 import android.content.Context
+import android.widget.Toast
 
 class SettingsActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -25,13 +26,18 @@ class SettingsActivity : ComponentActivity() {
                 SettingsScreen(
                     formType = formType,
                     onSave = { url ->
-                        val sharedPreferences = getSharedPreferences("app_prefs", Context.MODE_PRIVATE)
-                        val key = if (formType == "DISPATCH") "dispatch_sheet_url" else "continuous_sheet_url"
-                        with(sharedPreferences.edit()) {
-                            putString(key, url)
-                            apply()
+                        try {
+                            val sharedPreferences = getSharedPreferences("app_prefs", Context.MODE_PRIVATE)
+                            val key = if (formType == "DISPATCH") "dispatch_sheet_url" else "continuous_sheet_url"
+                            with(sharedPreferences.edit()) {
+                                putString(key, url)
+                                apply()
+                            }
+                            Toast.makeText(this, "URL guardada correctamente para $formType", Toast.LENGTH_SHORT).show()
+                            finish()
+                        } catch (e: Exception) {
+                            Toast.makeText(this, "Error al guardar la URL: ${e.message}", Toast.LENGTH_LONG).show()
                         }
-                        finish()
                     }
                 )
             }
@@ -80,7 +86,7 @@ fun SettingsScreen(
                 if (url.isNotBlank()) {
                     onSave(url)
                 } else {
-                    // Mostrar mensaje de error (puedes usar un Toast o Snackbar)
+                    Toast.makeText(context, "La URL no puede estar vacía", Toast.LENGTH_SHORT).show()
                 }
             },
             modifier = Modifier.align(Alignment.End)

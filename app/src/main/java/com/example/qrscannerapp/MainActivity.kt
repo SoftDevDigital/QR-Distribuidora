@@ -25,12 +25,13 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
-import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.runtime.LaunchedEffect
 import com.example.qrscannerapp.ui.theme.QRScannerAppTheme
 import com.google.gson.Gson
 import com.journeyapps.barcodescanner.ScanOptions
@@ -78,7 +79,6 @@ class MainActivity : ComponentActivity() {
         val photoName = "foto_${remito}_${numeroFotoActual}.jpg"
         val timestamp = System.currentTimeMillis()
 
-        // Guardar en la galería usando MediaStore
         val values = ContentValues().apply {
             put(MediaStore.Images.Media.DISPLAY_NAME, photoName)
             put(MediaStore.Images.Media.MIME_TYPE, "image/jpeg")
@@ -100,7 +100,6 @@ class MainActivity : ComponentActivity() {
             }
         }
 
-        // Guardar en una carpeta personalizada (respaldo)
         val backupDir = File(getExternalFilesDir(null), "Fotos")
         if (!backupDir.exists()) backupDir.mkdirs()
 
@@ -165,6 +164,33 @@ class MainActivity : ComponentActivity() {
     ) { isGranted ->
         if (isGranted) {
             startQrScanner()
+        } else {
+            Toast.makeText(this, "Permiso de cámara denegado", Toast.LENGTH_LONG).show()
+        }
+    }
+
+    private fun checkCameraPermission() {
+        when {
+            ContextCompat.checkSelfPermission(
+                this,
+                Manifest.permission.CAMERA
+            ) == PackageManager.PERMISSION_GRANTED -> {
+                startQrScanner()
+            }
+            ActivityCompat.shouldShowRequestPermissionRationale(
+                this,
+                Manifest.permission.CAMERA
+            ) -> {
+                Toast.makeText(
+                    this,
+                    "Se necesita permiso de cámara para escanear QR",
+                    Toast.LENGTH_SHORT
+                ).show()
+                requestPermissionLauncher.launch(Manifest.permission.CAMERA)
+            }
+            else -> {
+                requestPermissionLauncher.launch(Manifest.permission.CAMERA)
+            }
         }
     }
 
@@ -213,6 +239,7 @@ class MainActivity : ComponentActivity() {
                     "transporte" to pedido.transporte,
                     "observaciones" to pedido.observaciones
                 )
+                Log.d("GOOGLE_SHEETS", "Enviando JSON: ${Gson().toJson(jsonMap)}")
 
                 val gson = Gson()
                 val json = gson.toJson(jsonMap)
@@ -224,13 +251,14 @@ class MainActivity : ComponentActivity() {
                 connection.outputStream.use { os -> os.write(json.toByteArray(Charsets.UTF_8)) }
 
                 val responseCode = connection.responseCode
+                Log.d("GOOGLE_SHEETS", "Respuesta: Código $responseCode")
                 if (responseCode == HttpURLConnection.HTTP_OK) {
                     Log.d("GOOGLE_SHEETS", "✅ Enviado con fecha original correctamente")
                 } else {
                     Log.e("GOOGLE_SHEETS", "❌ Error al enviar con fecha: Código $responseCode")
                 }
             } catch (e: Exception) {
-                Log.e("GOOGLE_SHEETS", "❌ Excepción al enviar con fecha: ${e.message}")
+                Log.e("GOOGLE_SHEETS", "❌ Excepción al enviar con fecha: ${e.message}", e)
             }
         }
     }
@@ -290,7 +318,10 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+    }
 
+    override fun onResume() {
+        super.onResume()
         setContent {
             QRScannerAppTheme {
                 Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
@@ -398,33 +429,6 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    private fun checkCameraPermission() {
-        when {
-            ContextCompat.checkSelfPermission(
-                this,
-                Manifest.permission.CAMERA
-            ) == PackageManager.PERMISSION_GRANTED -> {
-                startQrScanner()
-            }
-
-            ActivityCompat.shouldShowRequestPermissionRationale(
-                this,
-                Manifest.permission.CAMERA
-            ) -> {
-                Toast.makeText(
-                    this,
-                    "Se necesita permiso de cámara para escanear QR",
-                    Toast.LENGTH_SHORT
-                ).show()
-                requestPermissionLauncher.launch(Manifest.permission.CAMERA)
-            }
-
-            else -> {
-                requestPermissionLauncher.launch(Manifest.permission.CAMERA)
-            }
-        }
-    }
-
     private fun compartirArchivo(file: File) {
         val uri = FileProvider.getUriForFile(this, "$packageName.provider", file)
         val intent = Intent(Intent.ACTION_SEND).apply {
@@ -503,8 +507,15 @@ class MainActivity : ComponentActivity() {
         onVerPedidosClick: () -> Unit
     ) {
         val sharedPreferences = getSharedPreferences("app_prefs", MODE_PRIVATE)
-        val dispatchSheetUrl by remember { mutableStateOf(sharedPreferences.getString("dispatch_sheet_url", "") ?: "") }
-        val continuousSheetUrl by remember { mutableStateOf(sharedPreferences.getString("continuous_sheet_url", "") ?: "") }
+        // Estado reactivo para las URLs
+        val (dispatchSheetUrl, setDispatchSheetUrl) = remember { mutableStateOf(sharedPreferences.getString("dispatch_sheet_url", "") ?: "") }
+        val (continuousSheetUrl, setContinuousSheetUrl) = remember { mutableStateOf(sharedPreferences.getString("continuous_sheet_url", "") ?: "") }
+
+        // Recargar las URLs al detectar un cambio en la actividad
+        LaunchedEffect(Unit) {
+            setDispatchSheetUrl(sharedPreferences.getString("dispatch_sheet_url", "") ?: "")
+            setContinuousSheetUrl(sharedPreferences.getString("continuous_sheet_url", "") ?: "")
+        }
 
         Column(
             modifier = modifier.fillMaxSize(),

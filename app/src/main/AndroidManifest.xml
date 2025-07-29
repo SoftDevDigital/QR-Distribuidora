@@ -44,9 +44,17 @@
             </intent-filter>
         </activity>
 
+        <!-- Agrega estas declaraciones -->
+        <activity
+            android:name=".ContinuousScanActivity"
+            android:exported="false"
+            android:label="Escaneo Continuo" />
+
         <activity
             android:name=".SettingsActivity"
             android:exported="false"
             android:label="Configuración de URLs" />
+
     </application>
+
 </manifest>
