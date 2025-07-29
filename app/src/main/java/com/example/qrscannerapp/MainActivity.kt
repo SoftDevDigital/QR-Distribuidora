@@ -2,65 +2,46 @@ package com.example.qrscannerapp
 
 import android.Manifest
 import android.content.ContentValues
+import android.content.Context
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
 import android.os.Environment
 import android.provider.MediaStore
-import android.content.Context
+import android.util.Log
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.activity.enableEdgeToEdge
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.core.app.ActivityCompat
+import androidx.core.content.ContextCompat
+import androidx.core.content.FileProvider
+import androidx.compose.ui.tooling.preview.Preview
+import com.example.qrscannerapp.ui.theme.QRScannerAppTheme
+import com.google.gson.Gson
+import com.journeyapps.barcodescanner.ScanOptions
+import kotlinx.coroutines.*
+import java.io.File
+import java.io.IOException
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
-import androidx.activity.enableEdgeToEdge
-import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.Button
-import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Text
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
-import androidx.compose.ui.Modifier
 import java.net.URL
 import java.net.HttpURLConnection
-import androidx.core.app.ActivityCompat
-import androidx.core.content.ContextCompat
-import com.example.qrscannerapp.ui.theme.QRScannerAppTheme
-import androidx.compose.ui.tooling.preview.Preview
-import com.journeyapps.barcodescanner.ScanOptions
-import androidx.compose.ui.unit.dp
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.ButtonDefaults
-import androidx.compose.ui.graphics.Color
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.width
-import androidx.compose.ui.unit.sp
-import com.example.qrscannerapp.FormularioDespacho
-import com.google.gson.Gson
-import java.io.File
-import java.io.FileOutputStream
-import androidx.core.content.FileProvider
-import com.example.qrscannerapp.PedidosListScreen
-import android.content.Intent
-import android.util.Log
-import kotlinx.coroutines.*
-import com.google.android.gms.auth.api.signin.GoogleSignInOptions
-import com.google.android.gms.auth.api.signin.GoogleSignIn
-import com.google.android.gms.common.api.Scope
-import com.google.api.services.drive.DriveScopes
-import com.google.android.gms.auth.api.signin.GoogleSignInAccount
-import com.google.android.gms.tasks.Task
-import com.google.android.gms.auth.GoogleAuthUtil
-import com.google.android.gms.common.api.ApiException
-import java.io.IOException
 
 private var mostrarListaPedidos by mutableStateOf(false)
 private val photoFiles = mutableListOf<File>()
@@ -68,7 +49,6 @@ private var numeroFotoActual = 1
 data class PedidoConFecha(val pedido: Pedido, val fechaCreacion: Long)
 
 class MainActivity : ComponentActivity() {
-    private val RC_SIGN_IN = 1001
     private var qrResult by mutableStateOf<String?>(null)
     private var photoFile: File? = null
 
@@ -98,7 +78,7 @@ class MainActivity : ComponentActivity() {
         val photoName = "foto_${remito}_${numeroFotoActual}.jpg"
         val timestamp = System.currentTimeMillis()
 
-        // 1. Guardar en la galería usando MediaStore
+        // Guardar en la galería usando MediaStore
         val values = ContentValues().apply {
             put(MediaStore.Images.Media.DISPLAY_NAME, photoName)
             put(MediaStore.Images.Media.MIME_TYPE, "image/jpeg")
@@ -120,16 +100,16 @@ class MainActivity : ComponentActivity() {
             }
         }
 
-        // 2. Guardar en una carpeta personalizada (respaldo)
+        // Guardar en una carpeta personalizada (respaldo)
         val backupDir = File(getExternalFilesDir(null), "Fotos")
         if (!backupDir.exists()) backupDir.mkdirs()
 
         val backupFile = File(backupDir, photoName)
         try {
             File(photoFile.absolutePath).copyTo(backupFile, overwrite = true)
-            photoFiles.remove(photoFile) // Reemplazar el archivo temporal por el de respaldo
+            photoFiles.remove(photoFile)
             photoFiles.add(backupFile)
-            photoFile?.delete() // Eliminar archivo temporal
+            photoFile?.delete()
         } catch (e: IOException) {
             Log.e("SAVE_PHOTO", "❌ Error al guardar copia de respaldo: ${e.message}")
         }
@@ -152,7 +132,7 @@ class MainActivity : ComponentActivity() {
         val options = ScanOptions()
         options.setDesiredBarcodeFormats(ScanOptions.QR_CODE)
         options.setPrompt("Escanea el código QR")
-        options.setCameraId(0) // Cámara trasera
+        options.setCameraId(0)
         options.setBeepEnabled(true)
         options.setBarcodeImageEnabled(true)
         options.setCaptureActivity(com.journeyapps.barcodescanner.CaptureActivity::class.java)
@@ -188,10 +168,10 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    private fun enviarPedidoAGoogleSheets(pedido: Pedido) {
+    private fun enviarPedidoAGoogleSheets(pedido: Pedido, sheetUrl: String) {
         CoroutineScope(Dispatchers.IO).launch {
             try {
-                val url = URL("https://script.google.com/macros/s/AKfycbwv6BS2WCAjU11HS08ZdCltqRxXCsMjz01BNQiUdj4cE9CNXNnB-zhREIvhG2SEfcd_8w/exec")
+                val url = URL(sheetUrl)
                 val json = Gson().toJson(pedido)
 
                 val connection = url.openConnection() as HttpURLConnection
@@ -215,20 +195,23 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    private fun enviarPedidoAGoogleSheetsConFecha(pedido: Pedido, fechaCreacion: Long) {
+    private fun enviarPedidoAGoogleSheetsConFecha(pedido: Pedido, fechaCreacion: Long, sheetUrl: String) {
         CoroutineScope(Dispatchers.IO).launch {
             try {
-                val url = URL("https://script.google.com/macros/s/AKfycbwv6BS2WCAjU11HS08ZdCltqRxXCsMjz01BNQiUdj4cE9CNXNnB-zhREIvhG2SEfcd_8w/exec")
-
-                // Usar la fecha original
+                val url = URL(sheetUrl)
                 val dateStr = SimpleDateFormat("dd/MM/yyyy HH:mm", Locale.getDefault()).format(Date(fechaCreacion))
 
                 val jsonMap = mutableMapOf<String, Any>(
                     "remito" to pedido.remito,
-                    "cantidadBolsas" to pedido.cantidadBolsas,
-                    "responsable" to pedido.responsable,
-                    "observaciones" to pedido.observaciones,
-                    "fecha" to dateStr // Este campo debes aceptarlo en tu Apps Script
+                    "fecha" to dateStr,
+                    "cliente" to pedido.cliente,
+                    "cajas" to pedido.cajas,
+                    "bolsas" to pedido.cantidadBolsas,
+                    "bolsones" to pedido.bolsones,
+                    "armado" to pedido.armado,
+                    "revisa" to pedido.revisa,
+                    "transporte" to pedido.transporte,
+                    "observaciones" to pedido.observaciones
                 )
 
                 val gson = Gson()
@@ -246,14 +229,13 @@ class MainActivity : ComponentActivity() {
                 } else {
                     Log.e("GOOGLE_SHEETS", "❌ Error al enviar con fecha: Código $responseCode")
                 }
-
             } catch (e: Exception) {
                 Log.e("GOOGLE_SHEETS", "❌ Excepción al enviar con fecha: ${e.message}")
             }
         }
     }
 
-    private fun sincronizarPedidosPendientes(context: Context) {
+    private fun sincronizarPedidosPendientes(context: Context, sheetUrl: String) {
         val pedidos = cargarPedidosGuardados()
 
         CoroutineScope(Dispatchers.IO).launch {
@@ -263,10 +245,8 @@ class MainActivity : ComponentActivity() {
                 val sentMarker = File(getExternalFilesDir(null), "pedido_${pedidoConFecha.fechaCreacion}.sent")
 
                 if (!sentMarker.exists() && jsonFile.exists()) {
-                    // 1. Enviar a Google Sheets
-                    enviarPedidoAGoogleSheetsConFecha(pedido, pedidoConFecha.fechaCreacion)
+                    enviarPedidoAGoogleSheetsConFecha(pedido, pedidoConFecha.fechaCreacion, sheetUrl)
 
-                    // 2. Subir JSON
                     try {
                         DriveUploader.uploadFile(
                             context,
@@ -279,7 +259,6 @@ class MainActivity : ComponentActivity() {
                         Log.e("SYNC_JSON", "❌ Error al subir JSON: ${e.message}")
                     }
 
-                    // 3. Subir fotos
                     pedido.fotosPath.forEachIndexed { index, photoPath ->
                         val file = File(photoPath)
                         if (file.exists()) {
@@ -298,7 +277,6 @@ class MainActivity : ComponentActivity() {
                         }
                     }
 
-                    // 4. Crear archivo de marca para evitar reenvío
                     sentMarker.writeText("enviado")
                 }
             }
@@ -309,24 +287,9 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-
-
-
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
-        checkCameraPermission()
-
-        val gso = GoogleSignInOptions.Builder(GoogleSignInOptions.DEFAULT_SIGN_IN)
-            .requestEmail()
-            .requestScopes(Scope(DriveScopes.DRIVE_FILE))
-            .requestServerAuthCode(getString(R.string.server_client_id), false)
-            .requestIdToken(getString(R.string.server_client_id))
-            .build()
-
-        val googleSignInClient = GoogleSignIn.getClient(this, gso)
-        //val signInIntent = googleSignInClient.signInIntent
-        //startActivityForResult(signInIntent, RC_SIGN_IN)
 
         setContent {
             QRScannerAppTheme {
@@ -338,7 +301,7 @@ class MainActivity : ComponentActivity() {
 
                             FormularioDespacho(
                                 qrData = qrResult!!,
-                                onGuardar = { cantidad, responsable, observaciones ->
+                                onGuardar = { fecha: String, cliente: String, cajas: String, bolsas: String, bolsones: String, armado: String, revisa: String, transporte: String, observaciones: String ->
                                     val folderId = "1rofvNaKGrqnw163RNw2YoxnKTgDqqrlY"
                                     val uploadedUrls = mutableListOf<String>()
 
@@ -356,16 +319,32 @@ class MainActivity : ComponentActivity() {
                                                 uploadedUrls.add("https://drive.google.com/file/d/$uploadedPhotoId/view")
                                             }
 
+                                            val sharedPreferences = getSharedPreferences("app_prefs", MODE_PRIVATE)
+                                            val sheetUrl = sharedPreferences.getString("dispatch_sheet_url", "") ?: ""
+
+                                            if (sheetUrl.isEmpty()) {
+                                                withContext(Dispatchers.Main) {
+                                                    Toast.makeText(this@MainActivity, "❌ URL de Google Sheets no configurada", Toast.LENGTH_LONG).show()
+                                                }
+                                                return@launch
+                                            }
+
                                             val pedido = Pedido(
                                                 remito = qrResult!!,
-                                                cantidadBolsas = cantidad,
-                                                responsable = responsable,
+                                                fecha = fecha,
+                                                cliente = cliente,
+                                                cajas = cajas,
+                                                cantidadBolsas = bolsas,
+                                                bolsones = bolsones,
+                                                armado = armado,
+                                                revisa = revisa,
+                                                transporte = transporte,
                                                 observaciones = observaciones,
                                                 fotosDriveUrls = uploadedUrls,
                                                 fotosPath = photoFiles.map { it.absolutePath }
                                             )
 
-                                            guardarPedido(pedido)
+                                            guardarPedido(pedido, sheetUrl)
 
                                         } catch (e: Exception) {
                                             Log.e("GUARDAR", "❌ Error al guardar pedido: ${e.message}")
@@ -386,64 +365,36 @@ class MainActivity : ComponentActivity() {
 
                         mostrarListaPedidos -> {
                             val pedidos = cargarPedidosGuardados()
+                            val sharedPreferences = getSharedPreferences("app_prefs", MODE_PRIVATE)
+                            val sheetUrl = sharedPreferences.getString("dispatch_sheet_url", "") ?: ""
                             PedidosListScreen(
                                 pedidos = pedidos,
                                 onVolverClick = { mostrarListaPedidos = false },
                                 onCompartirClick = { file -> compartirArchivo(file) },
-                                onBorrarTodosClick = { borrarTodosLosPedidos() } ,
-                                        onSincronizarClick = { sincronizarPedidosPendientes(this) }
+                                onBorrarTodosClick = { borrarTodosLosPedidos() },
+                                onSincronizarClick = { sincronizarPedidosPendientes(this, sheetUrl) }
                             )
                         }
 
                         else -> {
-                            QRScannerScreen(
+                            MainScreen(
                                 modifier = Modifier.padding(innerPadding),
-                                onScanClick = { checkCameraPermission() },
-                                onVerPedidosClick = { mostrarListaPedidos = true },
-                                qrResult = null
+                                onDispatchClick = { checkCameraPermission() },
+                                onContinuousScanClick = {
+                                    val intent = Intent(this, ContinuousScanActivity::class.java)
+                                    startActivity(intent)
+                                },
+                                onSettingsClick = { formType ->
+                                    val intent = Intent(this, SettingsActivity::class.java)
+                                    intent.putExtra("FORM_TYPE", formType)
+                                    startActivity(intent)
+                                },
+                                onVerPedidosClick = { mostrarListaPedidos = true }
                             )
                         }
                     }
                 }
             }
-        }
-    }
-
-    private fun handleSignInResult(completedTask: Task<GoogleSignInAccount>) {
-        try {
-            val account = completedTask.getResult(ApiException::class.java)
-            account.account?.let { accountInfo ->
-                val scope = "oauth2:${DriveScopes.DRIVE_FILE} ${DriveScopes.DRIVE}"
-                val token = GoogleAuthUtil.getToken(this, accountInfo, scope)
-                Log.d("ACCESS_TOKEN", "Token: $token")
-            }
-        } catch (e: ApiException) {
-            Log.e("GOOGLE_SIGN_IN", "Sign in failed", e)
-        }
-    }
-
-    private fun borrarTodosLosPedidos() {
-        val dir = getExternalFilesDir(null)
-        dir?.listFiles()?.forEach { file ->
-            if (
-                (file.name.startsWith("pedido_") && file.extension == "json") ||
-                (file.name.startsWith("foto_") && file.extension == "jpg")
-            ) {
-                file.delete()
-            }
-        }
-        runOnUiThread {
-            Toast.makeText(this, "🗑️ Todos los pedidos fueron borrados", Toast.LENGTH_SHORT).show()
-            mostrarListaPedidos = false
-        }
-    }
-
-    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
-        super.onActivityResult(requestCode, resultCode, data)
-
-        if (requestCode == RC_SIGN_IN) {
-            val task = GoogleSignIn.getSignedInAccountFromIntent(data)
-            handleSignInResult(task)
         }
     }
 
@@ -484,7 +435,7 @@ class MainActivity : ComponentActivity() {
         startActivity(Intent.createChooser(intent, "Compartir con..."))
     }
 
-    private fun guardarPedido(pedido: Pedido) {
+    private fun guardarPedido(pedido: Pedido, sheetUrl: String) {
         val gson = Gson()
         val timestamp = System.currentTimeMillis()
         val json = gson.toJson(pedido)
@@ -493,7 +444,7 @@ class MainActivity : ComponentActivity() {
         val file = File(getExternalFilesDir(null), fileName)
         file.writeText(json)
 
-        enviarPedidoAGoogleSheetsConFecha(pedido, timestamp) // ⬅️ usa el timestamp real
+        enviarPedidoAGoogleSheetsConFecha(pedido, timestamp, sheetUrl)
 
         val folderId = "1rofvNaKGrqnw163RNw2YoxnKTgDqqrlY"
         CoroutineScope(Dispatchers.IO).launch {
@@ -519,7 +470,6 @@ class MainActivity : ComponentActivity() {
                     )
                 }
 
-                // Marcar como sincronizado
                 val sentMarker = File(getExternalFilesDir(null), "pedido_${timestamp}.sent")
                 sentMarker.writeText("enviado")
             } catch (e: Exception) {
@@ -528,32 +478,116 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    private fun borrarTodosLosPedidos() {
+        val dir = getExternalFilesDir(null)
+        dir?.listFiles()?.forEach { file ->
+            if (
+                (file.name.startsWith("pedido_") && file.extension == "json") ||
+                (file.name.startsWith("foto_") && file.extension == "jpg")
+            ) {
+                file.delete()
+            }
+        }
+        runOnUiThread {
+            Toast.makeText(this, "🗑️ Todos los pedidos fueron borrados", Toast.LENGTH_SHORT).show()
+            mostrarListaPedidos = false
+        }
+    }
+
     @Composable
-    fun QRScannerScreen(
+    fun MainScreen(
         modifier: Modifier = Modifier,
-        onScanClick: () -> Unit,
-        onVerPedidosClick: () -> Unit,
-        qrResult: String? = null
+        onDispatchClick: () -> Unit,
+        onContinuousScanClick: () -> Unit,
+        onSettingsClick: (String) -> Unit,
+        onVerPedidosClick: () -> Unit
     ) {
+        val sharedPreferences = getSharedPreferences("app_prefs", MODE_PRIVATE)
+        val dispatchSheetUrl by remember { mutableStateOf(sharedPreferences.getString("dispatch_sheet_url", "") ?: "") }
+        val continuousSheetUrl by remember { mutableStateOf(sharedPreferences.getString("continuous_sheet_url", "") ?: "") }
+
         Column(
             modifier = modifier.fillMaxSize(),
             verticalArrangement = Arrangement.Center,
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Button(
-                onClick = onScanClick,
-                shape = RoundedCornerShape(50),
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = Color(0xFF1A73E8),
-                    contentColor = Color.White
-                ),
+            Row(
                 modifier = Modifier
-                    .padding(horizontal = 32.dp, vertical = 8.dp)
-                    .height(50.dp)
-                    .width(200.dp)
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Text(text = "Escanear QR", fontSize = 16.sp)
+                Button(
+                    onClick = onDispatchClick,
+                    shape = RoundedCornerShape(50),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = Color(0xFF1A73E8),
+                        contentColor = Color.White
+                    ),
+                    modifier = Modifier
+                        .weight(1f)
+                        .padding(end = 8.dp)
+                        .height(50.dp)
+                ) {
+                    Text(text = "Formulario Despacho", fontSize = 16.sp)
+                }
+                IconButton(
+                    onClick = { onSettingsClick("DISPATCH") },
+                    modifier = Modifier.size(40.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Settings,
+                        contentDescription = "Configurar URL Despacho",
+                        tint = Color(0xFF1A73E8)
+                    )
+                }
             }
+
+            Text(
+                text = if (dispatchSheetUrl.isEmpty()) "URL no configurada" else "URL: $dispatchSheetUrl",
+                fontSize = 12.sp,
+                modifier = Modifier.padding(bottom = 16.dp)
+            )
+
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Button(
+                    onClick = onContinuousScanClick,
+                    shape = RoundedCornerShape(50),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = Color(0xFF34A853),
+                        contentColor = Color.White
+                    ),
+                    modifier = Modifier
+                        .weight(1f)
+                        .padding(end = 8.dp)
+                        .height(50.dp)
+                ) {
+                    Text(text = "Escaneo Continuo", fontSize = 16.sp)
+                }
+                IconButton(
+                    onClick = { onSettingsClick("CONTINUOUS") },
+                    modifier = Modifier.size(40.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Settings,
+                        contentDescription = "Configurar URL Escaneo Continuo",
+                        tint = Color(0xFF34A853)
+                    )
+                }
+            }
+
+            Text(
+                text = if (continuousSheetUrl.isEmpty()) "URL no configurada" else "URL: $continuousSheetUrl",
+                fontSize = 12.sp,
+                modifier = Modifier.padding(bottom = 16.dp)
+            )
 
             Button(
                 onClick = onVerPedidosClick,
@@ -569,24 +603,18 @@ class MainActivity : ComponentActivity() {
             ) {
                 Text(text = "Ver pedidos", fontSize = 16.sp)
             }
-
-            if (qrResult != null) {
-                Text(
-                    text = "Resultado: $qrResult",
-                    modifier = Modifier.padding(top = 16.dp)
-                )
-            }
         }
     }
 
     @Preview(showBackground = true)
     @Composable
-    fun QRScannerPreview() {
+    fun MainScreenPreview() {
         QRScannerAppTheme {
-            QRScannerScreen(
-                onScanClick = {},
-                onVerPedidosClick = {},
-                qrResult = null
+            MainScreen(
+                onDispatchClick = {},
+                onContinuousScanClick = {},
+                onSettingsClick = {},
+                onVerPedidosClick = {}
             )
         }
     }

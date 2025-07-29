@@ -22,7 +22,7 @@
         android:theme="@style/Theme.QRScannerApp"
         tools:targetApi="31">
 
-        <!-- 🔽 AÑADÍ ESTE BLOQUE DEBAJO DEL <application> PERO FUERA DE <activity> -->
+        <!-- FileProvider -->
         <provider
             android:name="androidx.core.content.FileProvider"
             android:authorities="${applicationId}.provider"
@@ -43,6 +43,10 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
-    </application>
 
+        <activity
+            android:name=".SettingsActivity"
+            android:exported="false"
+            android:label="Configuración de URLs" />
+    </application>
 </manifest>

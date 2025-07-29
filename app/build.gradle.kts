@@ -55,6 +55,7 @@ android {
 
 dependencies {
     implementation("com.google.code.gson:gson:2.10.1")
+    implementation("androidx.compose.ui:ui-tooling-preview:1.6.0")
     implementation("com.journeyapps:zxing-android-embedded:4.3.0")
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)

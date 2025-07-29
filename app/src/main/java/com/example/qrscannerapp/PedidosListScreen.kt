@@ -1,29 +1,29 @@
 package com.example.qrscannerapp
 
+import android.graphics.BitmapFactory
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.material3.Button
-import androidx.compose.material3.Card
-import androidx.compose.material3.Text
+import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
-import android.graphics.BitmapFactory
+import androidx.compose.ui.unit.sp
+import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
-import java.io.File
-import com.example.qrscannerapp.Pedido
+import androidx.compose.material3.MaterialTheme // Tema por defecto si QRScannerAppTheme no está definido
 
 @Composable
 fun PedidosListScreen(
     pedidos: List<PedidoConFecha>,
     onVolverClick: () -> Unit,
     onCompartirClick: (File) -> Unit,
-    onBorrarTodosClick: () -> Unit, // ✅ nuevo parámetro
+    onBorrarTodosClick: () -> Unit,
     onSincronizarClick: () -> Unit
 ) {
     Column(modifier = Modifier.fillMaxSize()) {
@@ -69,11 +69,16 @@ fun PedidosListScreen(
                         .fillMaxWidth()
                 ) {
                     Column(modifier = Modifier.padding(16.dp)) {
-                        Text("📅 Fecha: $fecha")
-                        Text("Remito: ${pedido.remito}")
-                        Text("Bolsas: ${pedido.cantidadBolsas}")
-                        Text("Responsable: ${pedido.responsable}")
-                        Text("Observaciones: ${pedido.observaciones}")
+                        Text("📅 Fecha: $fecha", fontSize = 14.sp)
+                        Text("Remito: ${pedido.remito}", fontSize = 14.sp)
+                        Text("Cliente: ${pedido.cliente}", fontSize = 14.sp)
+                        Text("Cajas: ${pedido.cajas}", fontSize = 14.sp)
+                        Text("Bolsas: ${pedido.cantidadBolsas}", fontSize = 14.sp)
+                        Text("Bolsones: ${pedido.bolsones}", fontSize = 14.sp)
+                        Text("Armado: ${pedido.armado}", fontSize = 14.sp)
+                        Text("Revisa: ${pedido.revisa}", fontSize = 14.sp)
+                        Text("Transporte: ${pedido.transporte}", fontSize = 14.sp)
+                        Text("Observaciones: ${pedido.observaciones}", fontSize = 14.sp)
 
                         pedido.fotosPath.forEach { path ->
                             val bitmap = BitmapFactory.decodeFile(path)
@@ -119,5 +124,36 @@ fun PedidosListScreen(
                 }
             }
         }
+    }
+}
+
+@Preview(showBackground = true)
+@Composable
+fun PedidosListScreenPreview() {
+    MaterialTheme {
+        PedidosListScreen(
+            pedidos = listOf(
+                PedidoConFecha(
+                    pedido = Pedido(
+                        remito = "12345",
+                        fecha = "01/01/2025",
+                        cliente = "Cliente Ejemplo",
+                        cajas = "10",
+                        cantidadBolsas = "20",
+                        bolsones = "5",
+                        armado = "Juan",
+                        revisa = "María",
+                        transporte = "Camión 123",
+                        observaciones = "Sin observaciones",
+                        fotosPath = emptyList()
+                    ),
+                    fechaCreacion = System.currentTimeMillis()
+                )
+            ),
+            onVolverClick = {},
+            onCompartirClick = {},
+            onBorrarTodosClick = {},
+            onSincronizarClick = {}
+        )
     }
 }
