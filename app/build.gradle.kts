@@ -66,6 +66,7 @@ dependencies {
     implementation(libs.androidx.material3)
     implementation("com.google.api-client:google-api-client-android:1.34.1")
     implementation("com.google.oauth-client:google-oauth-client-jetty:1.34.1")
+    implementation("com.squareup.okhttp3:okhttp:4.12.0")
     implementation("com.google.api-client:google-api-client-gson:1.34.1")
     implementation("com.google.apis:google-api-services-drive:v3-rev136-1.25.0")
     implementation("com.google.android.gms:play-services-auth:20.7.0")

@@ -7,17 +7,33 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.Alignment
+
 @Composable
 fun FormularioDespacho(
     qrData: String,
-    onGuardar: (cantidad: String, responsable: String, observaciones: String, tester1: String) -> Unit,
+    onGuardar: (
+        remito: String,
+        fecha: String,
+        cliente: String,
+        cajas: String,
+        bolsas: String,
+        bolsones: String,
+        armado: String,
+        revisa: String,
+        transporte: String,
+        observaciones: String
+    ) -> Unit,
     onTomarFoto: () -> Unit
-
 ) {
-    var cantidad by remember { mutableStateOf("") }
-    var responsable by remember { mutableStateOf("") }
+    var fecha by remember { mutableStateOf("") }
+    var cliente by remember { mutableStateOf("") }
+    var cajas by remember { mutableStateOf("") }
+    var bolsas by remember { mutableStateOf("") }
+    var bolsones by remember { mutableStateOf("") }
+    var armado by remember { mutableStateOf("") }
+    var revisa by remember { mutableStateOf("") }
+    var transporte by remember { mutableStateOf("") }
     var observaciones by remember { mutableStateOf("") }
-    var tester1 by remember { mutableStateOf("") }
 
     Column(
         modifier = Modifier
@@ -27,23 +43,56 @@ fun FormularioDespacho(
     ) {
         Text("Remito escaneado: $qrData", fontSize = 18.sp, modifier = Modifier.padding(bottom = 16.dp))
 
+
+
         OutlinedTextField(
-            value = cantidad,
-            onValueChange = { cantidad = it },
-            label = { Text("Cantidad de bolsas") },
+            value = cliente,
+            onValueChange = { cliente = it },
+            label = { Text("Cliente") },
             modifier = Modifier.fillMaxWidth()
         )
 
-        Spacer(modifier = Modifier.height(12.dp))
-
         OutlinedTextField(
-            value = responsable,
-            onValueChange = { responsable = it },
-            label = { Text("Responsable del despacho") },
+            value = cajas,
+            onValueChange = { cajas = it },
+            label = { Text("Cajas") },
             modifier = Modifier.fillMaxWidth()
         )
 
-        Spacer(modifier = Modifier.height(12.dp))
+        OutlinedTextField(
+            value = bolsas,
+            onValueChange = { bolsas = it },
+            label = { Text("Bolsas") },
+            modifier = Modifier.fillMaxWidth()
+        )
+
+        OutlinedTextField(
+            value = bolsones,
+            onValueChange = { bolsones = it },
+            label = { Text("Bolsones") },
+            modifier = Modifier.fillMaxWidth()
+        )
+
+        OutlinedTextField(
+            value = armado,
+            onValueChange = { armado = it },
+            label = { Text("Armado") },
+            modifier = Modifier.fillMaxWidth()
+        )
+
+        OutlinedTextField(
+            value = revisa,
+            onValueChange = { revisa = it },
+            label = { Text("Revisa") },
+            modifier = Modifier.fillMaxWidth()
+        )
+
+        OutlinedTextField(
+            value = transporte,
+            onValueChange = { transporte = it },
+            label = { Text("Transporte") },
+            modifier = Modifier.fillMaxWidth()
+        )
 
         OutlinedTextField(
             value = observaciones,
@@ -52,16 +101,7 @@ fun FormularioDespacho(
             modifier = Modifier.fillMaxWidth()
         )
 
-        Spacer(modifier = Modifier.height(24.dp))
-
-         OutlinedTextField(
-            value = tester1,
-            onValueChange = { tester1 = it },
-            label = { Text("tester1") },
-            modifier = Modifier.fillMaxWidth()
-        )
-
-        Spacer(modifier = Modifier.height(24.dp))
+        Spacer(modifier = Modifier.height(16.dp))
 
         Text("Fotos (máx. 3)", style = MaterialTheme.typography.titleMedium)
 
@@ -74,11 +114,14 @@ fun FormularioDespacho(
             Text("📷 Tomar Foto")
         }
 
-        Spacer(modifier = Modifier.height(24.dp)) // Esto separa visualmente los botones del de "Guardar"
+        Spacer(modifier = Modifier.height(24.dp))
 
         Button(
             onClick = {
-                onGuardar(cantidad, responsable, observaciones, tester1)
+                onGuardar(
+                    qrData, fecha, cliente, cajas, bolsas, bolsones,
+                    armado, revisa, transporte, observaciones
+                )
             },
             modifier = Modifier.align(Alignment.End)
         ) {

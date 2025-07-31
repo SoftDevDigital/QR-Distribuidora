@@ -218,18 +218,22 @@ class MainActivity : ComponentActivity() {
     private fun enviarPedidoAGoogleSheetsConFecha(pedido: Pedido, fechaCreacion: Long) {
         CoroutineScope(Dispatchers.IO).launch {
             try {
-                val url = URL("https://script.google.com/macros/library/d/1huWvzJ2BSKp1ItRxHC1UpvgY-pvyakB2MNb8-S628JCwQ420pFh7k1bG/1")
+                val url = URL("https://script.google.com/macros/s/AKfycbxOGr_laO7ZELpAMe7u2xi69W-VLRJb5wl2Gspo7NURjcIq0Vp1IwuVN96I1YqVP9Gn/exec")
 
                 // Usar la fecha original
                 val dateStr = SimpleDateFormat("dd/MM/yyyy HH:mm", Locale.getDefault()).format(Date(fechaCreacion))
 
                 val jsonMap = mutableMapOf<String, Any>(
                     "remito" to pedido.remito,
-                    "cantidadBolsas" to pedido.cantidadBolsas,
-                    "responsable" to pedido.responsable,
-                    "observaciones" to pedido.observaciones,
-                    "tester1" to pedido.tester1,
-                    "fecha" to dateStr // Este campo debes aceptarlo en tu Apps Script
+                    "fecha" to dateStr,
+                    "cliente" to pedido.cliente,
+                    "cajas" to pedido.cajas,
+                    "bolsas" to pedido.bolsas,
+                    "bolsones" to pedido.bolsones,
+                    "armado" to pedido.armado,
+                    "revisa" to pedido.revisa,
+                    "transporte" to pedido.transporte,
+                    "observaciones" to pedido.observaciones
                 )
 
                 // ver el log de datos
@@ -386,7 +390,7 @@ class MainActivity : ComponentActivity() {
 
                             FormularioDespacho(
                                 qrData = qrResult!!,
-                                onGuardar = { cantidad, responsable, observaciones, tester1 ->
+                                onGuardar = { remito, fecha, cliente, cajas, bolsas, bolsones, armado, revisa, transporte, observaciones ->
                                     val folderId = "1rofvNaKGrqnw163RNw2YoxnKTgDqqrlY"
                                     val uploadedUrls = mutableListOf<String>()
 
@@ -405,12 +409,16 @@ class MainActivity : ComponentActivity() {
                                             }
 
                                             val pedido = Pedido(
-                                                remito = qrResult!!,
-                                                cantidadBolsas = cantidad,
-                                                responsable = responsable,
+                                                remito = remito,
+                                                fecha = fecha,
+                                                cliente = cliente,
+                                                cajas = cajas,
+                                                bolsas = bolsas,
+                                                bolsones = bolsones,
+                                                armado = armado,
+                                                revisa = revisa,
+                                                transporte = transporte,
                                                 observaciones = observaciones,
-                                                tester1 = tester1,
-                                                fotoDriveUrl = "", // Valor por defecto
                                                 fotosDriveUrls = uploadedUrls,
                                                 fotosPath = photoFiles.map { it.absolutePath }
                                             )

@@ -69,14 +69,16 @@ fun PedidosListScreen(
                         .fillMaxWidth()
                 ) {
                     Column(modifier = Modifier.padding(16.dp)) {
-                        Text("📅 Fecha: $fecha")
-                        Text("Remito: ${pedido.remito}")
-                        Text("Bolsas: ${pedido.cantidadBolsas}")
-                        Text("Responsable: ${pedido.responsable}")
-                        Text("Observaciones: ${pedido.observaciones}")
-                        Text("TESTER DOC: ${pedido.tester1}")
-                        
 
+                        Text("Remito: ${pedido.remito}")
+                        Text("Cliente: ${pedido.cliente}")
+                        Text("Cajas: ${pedido.cajas} | Bolsas: ${pedido.bolsas} | Bolsones: ${pedido.bolsones}")
+                        Text("Armado por: ${pedido.armado}")
+                        Text("Revisado por: ${pedido.revisa}")
+                        Text("Transporte: ${pedido.transporte}")
+                        Text("Observaciones: ${pedido.observaciones}")
+
+                        // Mostrar fotos
                         pedido.fotosPath.forEach { path ->
                             val bitmap = BitmapFactory.decodeFile(path)
                             bitmap?.let {
@@ -91,6 +93,7 @@ fun PedidosListScreen(
                             }
                         }
 
+                        // Compartir JSON
                         val nombreJson = "pedido_${item.fechaCreacion}.json"
                         val archivoJson = if (pedido.fotosPath.isNotEmpty()) {
                             File(File(pedido.fotosPath.first()).parentFile, nombreJson)
@@ -107,6 +110,7 @@ fun PedidosListScreen(
                             Text("📤 Compartir JSON")
                         }
 
+                        // Compartir fotos
                         pedido.fotosPath.forEachIndexed { index, path ->
                             Button(
                                 onClick = { onCompartirClick(File(path)) },
