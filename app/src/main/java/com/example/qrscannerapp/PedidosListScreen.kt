@@ -74,6 +74,8 @@ fun PedidosListScreen(
                         Text("Bolsas: ${pedido.cantidadBolsas}")
                         Text("Responsable: ${pedido.responsable}")
                         Text("Observaciones: ${pedido.observaciones}")
+                        Text("TESTER DOC: ${pedido.tester1}")
+                        
 
                         pedido.fotosPath.forEach { path ->
                             val bitmap = BitmapFactory.decodeFile(path)

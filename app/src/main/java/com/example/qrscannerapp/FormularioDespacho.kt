@@ -10,13 +10,14 @@ import androidx.compose.ui.Alignment
 @Composable
 fun FormularioDespacho(
     qrData: String,
-    onGuardar: (cantidad: String, responsable: String, observaciones: String) -> Unit,
+    onGuardar: (cantidad: String, responsable: String, observaciones: String, tester1: String) -> Unit,
     onTomarFoto: () -> Unit
 
 ) {
     var cantidad by remember { mutableStateOf("") }
     var responsable by remember { mutableStateOf("") }
     var observaciones by remember { mutableStateOf("") }
+    var tester1 by remember { mutableStateOf("") }
 
     Column(
         modifier = Modifier
@@ -53,6 +54,15 @@ fun FormularioDespacho(
 
         Spacer(modifier = Modifier.height(24.dp))
 
+         OutlinedTextField(
+            value = tester1,
+            onValueChange = { tester1 = it },
+            label = { Text("tester1") },
+            modifier = Modifier.fillMaxWidth()
+        )
+
+        Spacer(modifier = Modifier.height(24.dp))
+
         Text("Fotos (máx. 3)", style = MaterialTheme.typography.titleMedium)
 
         Spacer(modifier = Modifier.height(8.dp))
@@ -68,7 +78,7 @@ fun FormularioDespacho(
 
         Button(
             onClick = {
-                onGuardar(cantidad, responsable, observaciones)
+                onGuardar(cantidad, responsable, observaciones, tester1)
             },
             modifier = Modifier.align(Alignment.End)
         ) {

@@ -6,6 +6,11 @@ import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
 import android.os.Environment
+import android.os.VibrationEffect
+import android.os.Vibrator
+import android.os.VibratorManager
+import android.media.ToneGenerator
+import android.media.AudioManager
 import android.provider.MediaStore
 import android.content.Context
 import android.widget.Toast
@@ -27,19 +32,28 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.viewinterop.AndroidView
+import com.journeyapps.barcodescanner.DecoratedBarcodeView
+import com.google.zxing.BarcodeFormat
+import com.journeyapps.barcodescanner.DefaultDecoderFactory
+import com.journeyapps.barcodescanner.BarcodeCallback
+import com.journeyapps.barcodescanner.BarcodeResult
 import java.net.URL
 import java.net.HttpURLConnection
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import com.example.qrscannerapp.ui.theme.QRScannerAppTheme
 import androidx.compose.ui.tooling.preview.Preview
-import com.journeyapps.barcodescanner.ScanOptions
 import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.ButtonDefaults
-import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Color as ComposeColor
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.width
 import androidx.compose.ui.unit.sp
@@ -61,6 +75,7 @@ import com.google.android.gms.tasks.Task
 import com.google.android.gms.auth.GoogleAuthUtil
 import com.google.android.gms.common.api.ApiException
 import java.io.IOException
+import android.graphics.Color
 
 private var mostrarListaPedidos by mutableStateOf(false)
 private val photoFiles = mutableListOf<File>()
@@ -71,6 +86,10 @@ class MainActivity : ComponentActivity() {
     private val RC_SIGN_IN = 1001
     private var qrResult by mutableStateOf<String?>(null)
     private var photoFile: File? = null
+    private var multiScanMode by mutableStateOf(false)
+    private var singleScanMode by mutableStateOf(false)
+    private var lastScanTime by mutableStateOf(0L)
+    private val SCAN_DELAY_MS = 4000L // 4 seconds delay between scans
 
     private val takePictureLauncher = registerForActivityResult(
         ActivityResultContracts.TakePicture()
@@ -81,16 +100,6 @@ class MainActivity : ComponentActivity() {
             numeroFotoActual++
         } else {
             Toast.makeText(this, "❌ No se tomó la foto o hubo un error", Toast.LENGTH_SHORT).show()
-        }
-    }
-
-    private val barcodeLauncher = registerForActivityResult(
-        ActivityResultContracts.StartActivityForResult()
-    ) { result ->
-        val contents = result.data?.getStringExtra("SCAN_RESULT")
-        if (contents != null) {
-            qrResult = contents
-            println("Código QR escaneado: $contents")
         }
     }
 
@@ -148,17 +157,6 @@ class MainActivity : ComponentActivity() {
         takePictureLauncher.launch(uri)
     }
 
-    private fun startQrScanner() {
-        val options = ScanOptions()
-        options.setDesiredBarcodeFormats(ScanOptions.QR_CODE)
-        options.setPrompt("Escanea el código QR")
-        options.setCameraId(0) // Cámara trasera
-        options.setBeepEnabled(true)
-        options.setBarcodeImageEnabled(true)
-        options.setCaptureActivity(com.journeyapps.barcodescanner.CaptureActivity::class.java)
-        barcodeLauncher.launch(options.createScanIntent(this))
-    }
-
     private fun cargarPedidosGuardados(): List<PedidoConFecha> {
         val pedidos = mutableListOf<PedidoConFecha>()
         val filesDir = getExternalFilesDir(null)
@@ -184,14 +182,16 @@ class MainActivity : ComponentActivity() {
         ActivityResultContracts.RequestPermission()
     ) { isGranted ->
         if (isGranted) {
-            startQrScanner()
+            // Permission granted, no further action needed here as onGranted is handled in checkCameraPermission
+        } else {
+            Toast.makeText(this, "❌ Permiso de cámara denegado", Toast.LENGTH_SHORT).show()
         }
     }
 
     private fun enviarPedidoAGoogleSheets(pedido: Pedido) {
         CoroutineScope(Dispatchers.IO).launch {
             try {
-                val url = URL("https://script.google.com/macros/s/AKfycbwv6BS2WCAjU11HS08ZdCltqRxXCsMjz01BNQiUdj4cE9CNXNnB-zhREIvhG2SEfcd_8w/exec")
+                val url = URL("https://script.google.com/macros/library/d/1huWvzJ2BSKp1ItRxHC1UpvgY-pvyakB2MNb8-S628JCwQ420pFh7k1bG/1")
                 val json = Gson().toJson(pedido)
 
                 val connection = url.openConnection() as HttpURLConnection
@@ -218,7 +218,7 @@ class MainActivity : ComponentActivity() {
     private fun enviarPedidoAGoogleSheetsConFecha(pedido: Pedido, fechaCreacion: Long) {
         CoroutineScope(Dispatchers.IO).launch {
             try {
-                val url = URL("https://script.google.com/macros/s/AKfycbwv6BS2WCAjU11HS08ZdCltqRxXCsMjz01BNQiUdj4cE9CNXNnB-zhREIvhG2SEfcd_8w/exec")
+                val url = URL("https://script.google.com/macros/library/d/1huWvzJ2BSKp1ItRxHC1UpvgY-pvyakB2MNb8-S628JCwQ420pFh7k1bG/1")
 
                 // Usar la fecha original
                 val dateStr = SimpleDateFormat("dd/MM/yyyy HH:mm", Locale.getDefault()).format(Date(fechaCreacion))
@@ -228,8 +228,12 @@ class MainActivity : ComponentActivity() {
                     "cantidadBolsas" to pedido.cantidadBolsas,
                     "responsable" to pedido.responsable,
                     "observaciones" to pedido.observaciones,
+                    "tester1" to pedido.tester1,
                     "fecha" to dateStr // Este campo debes aceptarlo en tu Apps Script
                 )
+
+                // ver el log de datos
+                Log.d("GOOGLE_SHEETS", "Datos a enviar: $jsonMap")
 
                 val gson = Gson()
                 val json = gson.toJson(jsonMap)
@@ -246,9 +250,41 @@ class MainActivity : ComponentActivity() {
                 } else {
                     Log.e("GOOGLE_SHEETS", "❌ Error al enviar con fecha: Código $responseCode")
                 }
-
             } catch (e: Exception) {
                 Log.e("GOOGLE_SHEETS", "❌ Excepción al enviar con fecha: ${e.message}")
+            }
+        }
+    }
+
+    private fun enviarRemitoAGoogleSheets(remito: String, fechaCreacion: Long) {
+        CoroutineScope(Dispatchers.IO).launch {
+            try {
+                val url = URL("https://script.google.com/macros/s/AKfycbwv6BS2WCAjU11HS08ZdCltqRxXCsMjz01BNQiUdj4cE9CNXNnB-zhREIvhG2SEfcd_8w/exec")
+
+                val dateStr = SimpleDateFormat("dd/MM/yyyy HH:mm", Locale.getDefault()).format(Date(fechaCreacion))
+
+                val jsonMap = mapOf(
+                    "remito" to remito,
+                    "fecha" to dateStr
+                )
+
+                val gson = Gson()
+                val json = gson.toJson(jsonMap)
+
+                val connection = url.openConnection() as HttpURLConnection
+                connection.requestMethod = "POST"
+                connection.setRequestProperty("Content-Type", "application/json")
+                connection.doOutput = true
+                connection.outputStream.use { os -> os.write(json.toByteArray(Charsets.UTF_8)) }
+
+                val responseCode = connection.responseCode
+                if (responseCode == HttpURLConnection.HTTP_OK) {
+                    Log.d("GOOGLE_SHEETS_MULTI", "✅ Remito $remito enviado correctamente")
+                } else {
+                    Log.e("GOOGLE_SHEETS_MULTI", "❌ Error al enviar remito $remito: Código $responseCode")
+                }
+            } catch (e: Exception) {
+                Log.e("GOOGLE_SHEETS_MULTI", "❌ Excepción al enviar remito $remito: ${e.message}")
             }
         }
     }
@@ -309,13 +345,9 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-
-
-
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
-        checkCameraPermission()
 
         val gso = GoogleSignInOptions.Builder(GoogleSignInOptions.DEFAULT_SIGN_IN)
             .requestEmail()
@@ -325,20 +357,36 @@ class MainActivity : ComponentActivity() {
             .build()
 
         val googleSignInClient = GoogleSignIn.getClient(this, gso)
-        //val signInIntent = googleSignInClient.signInIntent
-        //startActivityForResult(signInIntent, RC_SIGN_IN)
 
         setContent {
             QRScannerAppTheme {
                 Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
                     when {
+                        multiScanMode -> {
+                            MultiScanScreen(
+                                onStop = { multiScanMode = false },
+                                onScan = { remito ->
+                                    enviarRemitoAGoogleSheets(remito, System.currentTimeMillis())
+                                    Toast.makeText(this@MainActivity, "✅ Remito $remito enviado", Toast.LENGTH_SHORT).show()
+                                }
+                            )
+                        }
+                        singleScanMode -> {
+                            SingleScanScreen(
+                                onStop = { singleScanMode = false },
+                                onScan = { remito ->
+                                    qrResult = remito
+                                    singleScanMode = false
+                                }
+                            )
+                        }
                         qrResult != null -> {
                             numeroFotoActual = 1
                             photoFiles.clear()
 
                             FormularioDespacho(
                                 qrData = qrResult!!,
-                                onGuardar = { cantidad, responsable, observaciones ->
+                                onGuardar = { cantidad, responsable, observaciones, tester1 ->
                                     val folderId = "1rofvNaKGrqnw163RNw2YoxnKTgDqqrlY"
                                     val uploadedUrls = mutableListOf<String>()
 
@@ -361,12 +409,13 @@ class MainActivity : ComponentActivity() {
                                                 cantidadBolsas = cantidad,
                                                 responsable = responsable,
                                                 observaciones = observaciones,
+                                                tester1 = tester1,
+                                                fotoDriveUrl = "", // Valor por defecto
                                                 fotosDriveUrls = uploadedUrls,
                                                 fotosPath = photoFiles.map { it.absolutePath }
                                             )
 
                                             guardarPedido(pedido)
-
                                         } catch (e: Exception) {
                                             Log.e("GUARDAR", "❌ Error al guardar pedido: ${e.message}")
                                         }
@@ -383,23 +432,22 @@ class MainActivity : ComponentActivity() {
                                 }
                             )
                         }
-
                         mostrarListaPedidos -> {
                             val pedidos = cargarPedidosGuardados()
                             PedidosListScreen(
                                 pedidos = pedidos,
                                 onVolverClick = { mostrarListaPedidos = false },
                                 onCompartirClick = { file -> compartirArchivo(file) },
-                                onBorrarTodosClick = { borrarTodosLosPedidos() } ,
-                                        onSincronizarClick = { sincronizarPedidosPendientes(this) }
+                                onBorrarTodosClick = { borrarTodosLosPedidos() },
+                                onSincronizarClick = { sincronizarPedidosPendientes(this) }
                             )
                         }
-
                         else -> {
                             QRScannerScreen(
                                 modifier = Modifier.padding(innerPadding),
-                                onScanClick = { checkCameraPermission() },
+                                onFormularioDespachoClick = { checkCameraPermission { singleScanMode = true } },
                                 onVerPedidosClick = { mostrarListaPedidos = true },
+                                onMultiScanClick = { checkCameraPermission { multiScanMode = true } },
                                 qrResult = null
                             )
                         }
@@ -447,13 +495,13 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    private fun checkCameraPermission() {
+    private fun checkCameraPermission(onGranted: () -> Unit) {
         when {
             ContextCompat.checkSelfPermission(
                 this,
                 Manifest.permission.CAMERA
             ) == PackageManager.PERMISSION_GRANTED -> {
-                startQrScanner()
+                onGranted()
             }
 
             ActivityCompat.shouldShowRequestPermissionRationale(
@@ -531,8 +579,9 @@ class MainActivity : ComponentActivity() {
     @Composable
     fun QRScannerScreen(
         modifier: Modifier = Modifier,
-        onScanClick: () -> Unit,
+        onFormularioDespachoClick: () -> Unit,
         onVerPedidosClick: () -> Unit,
+        onMultiScanClick: () -> Unit,
         qrResult: String? = null
     ) {
         Column(
@@ -541,26 +590,26 @@ class MainActivity : ComponentActivity() {
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             Button(
-                onClick = onScanClick,
+                onClick = onFormularioDespachoClick,
                 shape = RoundedCornerShape(50),
                 colors = ButtonDefaults.buttonColors(
-                    containerColor = Color(0xFF1A73E8),
-                    contentColor = Color.White
+                    containerColor = ComposeColor(0xFF1A73E8),
+                    contentColor = ComposeColor.White
                 ),
                 modifier = Modifier
                     .padding(horizontal = 32.dp, vertical = 8.dp)
                     .height(50.dp)
                     .width(200.dp)
             ) {
-                Text(text = "Escanear QR", fontSize = 16.sp)
+                Text(text = "Formulario de despacho", fontSize = 16.sp)
             }
 
             Button(
                 onClick = onVerPedidosClick,
                 shape = RoundedCornerShape(50),
                 colors = ButtonDefaults.buttonColors(
-                    containerColor = Color(0xFF34A853),
-                    contentColor = Color.White
+                    containerColor = ComposeColor(0xFF34A853),
+                    contentColor = ComposeColor.White
                 ),
                 modifier = Modifier
                     .padding(horizontal = 32.dp, vertical = 8.dp)
@@ -568,6 +617,21 @@ class MainActivity : ComponentActivity() {
                     .width(200.dp)
             ) {
                 Text(text = "Ver pedidos", fontSize = 16.sp)
+            }
+
+            Button(
+                onClick = onMultiScanClick,
+                shape = RoundedCornerShape(50),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = ComposeColor(0xFFEA4335),
+                    contentColor = ComposeColor.White
+                ),
+                modifier = Modifier
+                    .padding(horizontal = 32.dp, vertical = 8.dp)
+                    .height(50.dp)
+                    .width(200.dp)
+            ) {
+                Text(text = "Multi-scan", fontSize = 16.sp)
             }
 
             if (qrResult != null) {
@@ -579,13 +643,186 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    @Composable
+    fun MultiScanScreen(
+        onStop: () -> Unit,
+        onScan: (String) -> Unit
+    ) {
+        val context = LocalContext.current
+        val coroutineScope = rememberCoroutineScope()
+        val vibratorManager = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            context.getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as VibratorManager
+        } else {
+            null
+        }
+        val vibrator = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            vibratorManager?.defaultVibrator
+        } else {
+            @Suppress("DEPRECATION")
+            context.getSystemService(Context.VIBRATOR_SERVICE) as Vibrator
+        }
+        val toneGenerator = remember { ToneGenerator(AudioManager.STREAM_NOTIFICATION, 100) }
+
+        val barcodeView = remember {
+            DecoratedBarcodeView(context).apply {
+                decoderFactory = DefaultDecoderFactory(listOf(BarcodeFormat.QR_CODE))
+                statusView.text = "Escanea códigos QR continuamente"
+                viewFinder.setMaskColor(Color.argb(200, 0, 0, 0)) // Darker mask (increased opacity)
+                viewFinder.setLaserVisibility(true) // Show laser
+                decodeContinuous(object : BarcodeCallback {
+                    override fun barcodeResult(result: BarcodeResult?) {
+                        result?.text?.let { remito ->
+                            val currentTime = System.currentTimeMillis()
+                            if (currentTime - lastScanTime >= SCAN_DELAY_MS) {
+                                lastScanTime = currentTime
+                                // Vibrate or play sound
+                                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                                    if (vibrator?.hasVibrator() == true) {
+                                        vibrator.vibrate(
+                                            VibrationEffect.createOneShot(200, VibrationEffect.DEFAULT_AMPLITUDE)
+                                        )
+                                    } else {
+                                        toneGenerator.startTone(ToneGenerator.TONE_PROP_BEEP, 200)
+                                    }
+                                } else {
+                                    @Suppress("DEPRECATION")
+                                    if (vibrator?.hasVibrator() == true) {
+                                        vibrator.vibrate(200)
+                                    } else {
+                                        toneGenerator.startTone(ToneGenerator.TONE_PROP_BEEP, 200)
+                                    }
+                                }
+                                coroutineScope.launch {
+                                    onScan(remito)
+                                }
+                            }
+                        }
+                    }
+
+                    override fun possibleResultPoints(resultPoints: MutableList<com.google.zxing.ResultPoint>?) {}
+                })
+            }
+        }
+
+        Column(modifier = Modifier.fillMaxSize()) {
+            AndroidView(
+                factory = { barcodeView },
+                modifier = Modifier.weight(1f)
+            )
+            Button(
+                onClick = onStop,
+                modifier = Modifier
+                    .padding(16.dp),
+                shape = RoundedCornerShape(50),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = ComposeColor(0xFFEA4335),
+                    contentColor = ComposeColor.White
+                )
+            ) {
+                Text(text = "Detener Multi-scan", fontSize = 16.sp)
+            }
+            DisposableEffect(Unit) {
+                barcodeView.resume()
+                onDispose {
+                    barcodeView.pause()
+                    toneGenerator.release()
+                }
+            }
+        }
+    }
+
+    @Composable
+    fun SingleScanScreen(
+        onStop: () -> Unit,
+        onScan: (String) -> Unit
+    ) {
+        val context = LocalContext.current
+        val coroutineScope = rememberCoroutineScope()
+        val vibratorManager = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            context.getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as VibratorManager
+        } else {
+            null
+        }
+        val vibrator = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            vibratorManager?.defaultVibrator
+        } else {
+            @Suppress("DEPRECATION")
+            context.getSystemService(Context.VIBRATOR_SERVICE) as Vibrator
+        }
+        val toneGenerator = remember { ToneGenerator(AudioManager.STREAM_NOTIFICATION, 100) }
+
+        val barcodeView = remember {
+            DecoratedBarcodeView(context).apply {
+                decoderFactory = DefaultDecoderFactory(listOf(BarcodeFormat.QR_CODE))
+                statusView.text = "Escanea el código QR"
+                viewFinder.setMaskColor(Color.argb(200, 0, 0, 0)) // Darker mask (increased opacity)
+                viewFinder.setLaserVisibility(true) // Show laser
+                decodeSingle(object : BarcodeCallback {
+                    override fun barcodeResult(result: BarcodeResult?) {
+                        result?.text?.let { remito ->
+                            // Vibrate or play sound
+                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                                if (vibrator?.hasVibrator() == true) {
+                                    vibrator.vibrate(
+                                        VibrationEffect.createOneShot(200, VibrationEffect.DEFAULT_AMPLITUDE)
+                                    )
+                                } else {
+                                    toneGenerator.startTone(ToneGenerator.TONE_PROP_BEEP, 200)
+                                }
+                            } else {
+                                @Suppress("DEPRECATION")
+                                if (vibrator?.hasVibrator() == true) {
+                                    vibrator.vibrate(200)
+                                } else {
+                                    toneGenerator.startTone(ToneGenerator.TONE_PROP_BEEP, 200)
+                                }
+                            }
+                            coroutineScope.launch {
+                                onScan(remito)
+                            }
+                        }
+                    }
+
+                    override fun possibleResultPoints(resultPoints: MutableList<com.google.zxing.ResultPoint>?) {}
+                })
+            }
+        }
+
+        Column(modifier = Modifier.fillMaxSize()) {
+            AndroidView(
+                factory = { barcodeView },
+                modifier = Modifier.weight(1f)
+            )
+            Button(
+                onClick = onStop,
+                modifier = Modifier
+                    .padding(16.dp),
+                shape = RoundedCornerShape(50),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = ComposeColor(0xFFEA4335),
+                    contentColor = ComposeColor.White
+                )
+            ) {
+                Text(text = "Cancelar Escaneo", fontSize = 16.sp)
+            }
+            DisposableEffect(Unit) {
+                barcodeView.resume()
+                onDispose {
+                    barcodeView.pause()
+                    toneGenerator.release()
+                }
+            }
+        }
+    }
+
     @Preview(showBackground = true)
     @Composable
     fun QRScannerPreview() {
         QRScannerAppTheme {
             QRScannerScreen(
-                onScanClick = {},
+                onFormularioDespachoClick = {},
                 onVerPedidosClick = {},
+                onMultiScanClick = {},
                 qrResult = null
             )
         }
