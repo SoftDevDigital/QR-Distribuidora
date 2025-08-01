@@ -2,80 +2,66 @@ package com.example.qrscannerapp
 
 import android.Manifest
 import android.content.ContentValues
+import android.content.Context
+import android.content.Intent
+import android.content.SharedPreferences
 import android.content.pm.PackageManager
+import android.graphics.Color
+import android.media.AudioManager
+import android.media.ToneGenerator
 import android.os.Build
 import android.os.Bundle
 import android.os.Environment
 import android.os.VibrationEffect
 import android.os.Vibrator
 import android.os.VibratorManager
-import android.media.ToneGenerator
-import android.media.AudioManager
 import android.provider.MediaStore
-import android.content.Context
+import android.util.Log
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
-import java.text.SimpleDateFormat
-import java.util.Date
-import java.util.Locale
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.Button
-import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Text
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.setValue
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.DisposableEffect
-import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color as ComposeColor
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.input.TextFieldValue
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
-import com.journeyapps.barcodescanner.DecoratedBarcodeView
-import com.google.zxing.BarcodeFormat
-import com.journeyapps.barcodescanner.DefaultDecoderFactory
-import com.journeyapps.barcodescanner.BarcodeCallback
-import com.journeyapps.barcodescanner.BarcodeResult
-import java.net.URL
-import java.net.HttpURLConnection
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
-import com.example.qrscannerapp.ui.theme.QRScannerAppTheme
-import androidx.compose.ui.tooling.preview.Preview
-import androidx.compose.ui.unit.dp
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.ButtonDefaults
-import androidx.compose.ui.graphics.Color as ComposeColor
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.width
-import androidx.compose.ui.unit.sp
-import com.example.qrscannerapp.FormularioDespacho
-import com.google.gson.Gson
-import java.io.File
-import java.io.FileOutputStream
 import androidx.core.content.FileProvider
-import com.example.qrscannerapp.PedidosListScreen
-import android.content.Intent
-import android.util.Log
-import kotlinx.coroutines.*
-import com.google.android.gms.auth.api.signin.GoogleSignInOptions
+import com.example.qrscannerapp.ui.theme.QRScannerAppTheme
 import com.google.android.gms.auth.api.signin.GoogleSignIn
-import com.google.android.gms.common.api.Scope
-import com.google.api.services.drive.DriveScopes
 import com.google.android.gms.auth.api.signin.GoogleSignInAccount
-import com.google.android.gms.tasks.Task
+import com.google.android.gms.auth.api.signin.GoogleSignInOptions
 import com.google.android.gms.auth.GoogleAuthUtil
 import com.google.android.gms.common.api.ApiException
+import com.google.android.gms.common.api.Scope
+import com.google.api.services.drive.DriveScopes
+import com.google.gson.Gson
+import com.google.zxing.BarcodeFormat
+import com.journeyapps.barcodescanner.BarcodeCallback
+import com.journeyapps.barcodescanner.BarcodeResult
+import com.journeyapps.barcodescanner.DecoratedBarcodeView
+import com.journeyapps.barcodescanner.DefaultDecoderFactory
+import kotlinx.coroutines.*
+import java.io.File
 import java.io.IOException
-import android.graphics.Color
+import java.net.HttpURLConnection
+import java.net.URL
+import java.text.SimpleDateFormat
+import java.util.*
+import com.google.android.gms.tasks.Task // Para resolver "Unresolved reference: Task"
+import androidx.compose.ui.tooling.preview.Preview // Para la anotación @Preview
+
+
 
 private var mostrarListaPedidos by mutableStateOf(false)
 private val photoFiles = mutableListOf<File>()
@@ -90,6 +76,33 @@ class MainActivity : ComponentActivity() {
     private var singleScanMode by mutableStateOf(false)
     private var lastScanTime by mutableStateOf(0L)
     private val SCAN_DELAY_MS = 4000L // 4 seconds delay between scans
+
+    // SharedPreferences keys
+    private val PREFS_NAME = "QRScannerPrefs"
+    private val KEY_FORMULARIO_URL = "formulario_url"
+    private val KEY_MULTI_SCAN_URL = "multi_scan_url"
+    private val DEFAULT_FORMULARIO_URL = "https://script.google.com/macros/s/AKfycbxOGr_laO7ZELpAMe7u2xi69W-VLRJb5wl2Gspo7NURjcIq0Vp1IwuVN96I1YqVP9Gn/exec"
+    private val DEFAULT_MULTI_SCAN_URL = "https://script.google.com/macros/s/AKfycbwv6BS2WCAjU11HS08ZdCltqRxXCsMjz01BNQiUdj4cE9CNXNnB-zhREIvhG2SEfcd_8w/exec"
+
+    private fun getSharedPreferences(context: Context): SharedPreferences {
+        return context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+    }
+
+    private fun getFormularioUrl(context: Context): String {
+        return getSharedPreferences(context).getString(KEY_FORMULARIO_URL, DEFAULT_FORMULARIO_URL) ?: DEFAULT_FORMULARIO_URL
+    }
+
+    private fun getMultiScanUrl(context: Context): String {
+        return getSharedPreferences(context).getString(KEY_MULTI_SCAN_URL, DEFAULT_MULTI_SCAN_URL) ?: DEFAULT_MULTI_SCAN_URL
+    }
+
+    private fun saveFormularioUrl(context: Context, url: String) {
+        getSharedPreferences(context).edit().putString(KEY_FORMULARIO_URL, url).apply()
+    }
+
+    private fun saveMultiScanUrl(context: Context, url: String) {
+        getSharedPreferences(context).edit().putString(KEY_MULTI_SCAN_URL, url).apply()
+    }
 
     private val takePictureLauncher = registerForActivityResult(
         ActivityResultContracts.TakePicture()
@@ -218,7 +231,8 @@ class MainActivity : ComponentActivity() {
     private fun enviarPedidoAGoogleSheetsConFecha(pedido: Pedido, fechaCreacion: Long) {
         CoroutineScope(Dispatchers.IO).launch {
             try {
-                val url = URL("https://script.google.com/macros/s/AKfycbxOGr_laO7ZELpAMe7u2xi69W-VLRJb5wl2Gspo7NURjcIq0Vp1IwuVN96I1YqVP9Gn/exec")
+                val context = this@MainActivity
+                val url = URL(getFormularioUrl(context))
 
                 // Usar la fecha original
                 val dateStr = SimpleDateFormat("dd/MM/yyyy HH:mm", Locale.getDefault()).format(Date(fechaCreacion))
@@ -263,7 +277,8 @@ class MainActivity : ComponentActivity() {
     private fun enviarRemitoAGoogleSheets(remito: String, fechaCreacion: Long) {
         CoroutineScope(Dispatchers.IO).launch {
             try {
-                val url = URL("https://script.google.com/macros/s/AKfycbwv6BS2WCAjU11HS08ZdCltqRxXCsMjz01BNQiUdj4cE9CNXNnB-zhREIvhG2SEfcd_8w/exec")
+                val context = this@MainActivity
+                val url = URL(getMultiScanUrl(context))
 
                 val dateStr = SimpleDateFormat("dd/MM/yyyy HH:mm", Locale.getDefault()).format(Date(fechaCreacion))
 
@@ -592,60 +607,169 @@ class MainActivity : ComponentActivity() {
         onMultiScanClick: () -> Unit,
         qrResult: String? = null
     ) {
+        val context = LocalContext.current
+        var showFormularioDialog by remember { mutableStateOf(false) }
+        var showMultiScanDialog by remember { mutableStateOf(false) }
+        var formularioUrl by remember { mutableStateOf(TextFieldValue(getFormularioUrl(context))) }
+        var multiScanUrl by remember { mutableStateOf(TextFieldValue(getMultiScanUrl(context))) }
+
         Column(
             modifier = modifier.fillMaxSize(),
             verticalArrangement = Arrangement.Center,
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Button(
-                onClick = onFormularioDespachoClick,
-                shape = RoundedCornerShape(50),
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = ComposeColor(0xFF1A73E8),
-                    contentColor = ComposeColor.White
-                ),
+            Row(
                 modifier = Modifier
-                    .padding(horizontal = 32.dp, vertical = 8.dp)
-                    .height(50.dp)
-                    .width(200.dp)
+                    .fillMaxWidth()
+                    .padding(horizontal = 32.dp, vertical = 8.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Text(text = "Formulario de despacho", fontSize = 16.sp)
+                Button(
+                    onClick = onFormularioDespachoClick,
+                    shape = RoundedCornerShape(50),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = ComposeColor(0xFF1A73E8),
+                        contentColor = ComposeColor.White
+                    ),
+                    modifier = Modifier
+                        .height(50.dp)
+                        .weight(1f)
+                ) {
+                    Text(text = "Formulario de despacho", fontSize = 16.sp)
+                }
+                Spacer(modifier = Modifier.width(8.dp))
+                IconButton(
+                    onClick = { showFormularioDialog = true },
+                    modifier = Modifier.size(40.dp)
+                ) {
+                    Text("⚙️", fontSize = 24.sp)
+                }
             }
 
-            Button(
-                onClick = onVerPedidosClick,
-                shape = RoundedCornerShape(50),
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = ComposeColor(0xFF34A853),
-                    contentColor = ComposeColor.White
-                ),
+            Row(
                 modifier = Modifier
-                    .padding(horizontal = 32.dp, vertical = 8.dp)
-                    .height(50.dp)
-                    .width(200.dp)
+                    .fillMaxWidth()
+                    .padding(horizontal = 32.dp, vertical = 8.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Text(text = "Ver pedidos", fontSize = 16.sp)
+                Button(
+                    onClick = onVerPedidosClick,
+                    shape = RoundedCornerShape(50),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = ComposeColor(0xFF34A853),
+                        contentColor = ComposeColor.White
+                    ),
+                    modifier = Modifier
+                        .height(50.dp)
+                        .weight(1f)
+                ) {
+                    Text(text = "Ver pedidos", fontSize = 16.sp)
+                }
             }
 
-            Button(
-                onClick = onMultiScanClick,
-                shape = RoundedCornerShape(50),
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = ComposeColor(0xFFEA4335),
-                    contentColor = ComposeColor.White
-                ),
+            Row(
                 modifier = Modifier
-                    .padding(horizontal = 32.dp, vertical = 8.dp)
-                    .height(50.dp)
-                    .width(200.dp)
+                    .fillMaxWidth()
+                    .padding(horizontal = 32.dp, vertical = 8.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Text(text = "Multi-scan", fontSize = 16.sp)
+                Button(
+                    onClick = onMultiScanClick,
+                    shape = RoundedCornerShape(50),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = ComposeColor(0xFFEA4335),
+                        contentColor = ComposeColor.White
+                    ),
+                    modifier = Modifier
+                        .height(50.dp)
+                        .weight(1f)
+                ) {
+                    Text(text = "Multi-scan", fontSize = 16.sp)
+                }
+                Spacer(modifier = Modifier.width(8.dp))
+                IconButton(
+                    onClick = { showMultiScanDialog = true },
+                    modifier = Modifier.size(40.dp)
+                ) {
+                    Text("⚙️", fontSize = 24.sp)
+                }
             }
 
             if (qrResult != null) {
                 Text(
                     text = "Resultado: $qrResult",
                     modifier = Modifier.padding(top = 16.dp)
+                )
+            }
+
+            // Dialog for Formulario URL
+            if (showFormularioDialog) {
+                AlertDialog(
+                    onDismissRequest = { showFormularioDialog = false },
+                    title = { Text("Configurar URL de Formulario") },
+                    text = {
+                        OutlinedTextField(
+                            value = formularioUrl,
+                            onValueChange = { formularioUrl = it },
+                            label = { Text("URL de Google Apps Script") },
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    },
+                    confirmButton = {
+                        Button(
+                            onClick = {
+                                saveFormularioUrl(context, formularioUrl.text)
+                                showFormularioDialog = false
+                                Toast.makeText(context, "✅ URL de Formulario guardada", Toast.LENGTH_SHORT).show()
+                            }
+                        ) {
+                            Text("Guardar")
+                        }
+                    },
+                    dismissButton = {
+                        Button(
+                            onClick = { showFormularioDialog = false }
+                        ) {
+                            Text("Cancelar")
+                        }
+                    }
+                )
+            }
+
+            // Dialog for Multi-scan URL
+            if (showMultiScanDialog) {
+                AlertDialog(
+                    onDismissRequest = { showMultiScanDialog = false },
+                    title = { Text("Configurar URL de Multi-scan") },
+                    text = {
+                        OutlinedTextField(
+                            value = multiScanUrl,
+                            onValueChange = { multiScanUrl = it },
+                            label = { Text("URL de Google Apps Script") },
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    },
+                    confirmButton = {
+                        Button(
+                            onClick = {
+                                saveMultiScanUrl(context, multiScanUrl.text)
+                                showMultiScanDialog = false
+                                Toast.makeText(context, "✅ URL de Multi-scan guardada", Toast.LENGTH_SHORT).show()
+                            }
+                        ) {
+                            Text("Guardar")
+                        }
+                    },
+                    dismissButton = {
+                        Button(
+                            onClick = { showMultiScanDialog = false }
+                        ) {
+                            Text("Cancelar")
+                        }
+                    }
                 )
             }
         }
