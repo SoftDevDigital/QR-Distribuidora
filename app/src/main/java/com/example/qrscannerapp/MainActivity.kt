@@ -447,6 +447,7 @@ class MainActivity : ComponentActivity() {
                                             qrResult = null
                                             photoFiles.clear()
                                             numeroFotoActual = 1
+                                            checkCameraPermission { singleScanMode = true }
                                         }
                                     }
                                 },
